@@ -12,7 +12,9 @@ class PendulumPainter extends CustomPainter {
     required this.phaseNotifier,
     required this.beatNotifier,
     required this.beatsPerBar,
-  });
+  }) : super(
+          repaint: Listenable.merge(<Listenable>[phaseNotifier, beatNotifier]),
+        );
 
   final ValueListenable<double> phaseNotifier;
   final ValueListenable<int> beatNotifier;

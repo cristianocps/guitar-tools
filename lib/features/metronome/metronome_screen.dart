@@ -131,7 +131,6 @@ class _MetronomeScreenState extends ConsumerState<MetronomeScreen>
                   beatNotifier: _beat,
                   beatsPerBar: settings.beatsPerBar,
                 ),
-                repaint: Listenable.merge(<Listenable>[_phase, _beat]),
                 child: const SizedBox.expand(),
               ),
             ),
