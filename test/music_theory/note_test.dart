@@ -40,5 +40,31 @@ void main() {
       expect(noteFromFrequency(0), isNull);
       expect(noteFromFrequency(-1), isNull);
     });
+
+    test('frequencyOf honors a configurable A4 reference', () {
+      const Note a4 = Note(9, 4);
+      // A4 reference of 442 Hz shifts A4's frequency accordingly.
+      expect(a4.frequencyOf(442).toStringAsFixed(2), '442.00');
+      // Default getter still returns 440 Hz.
+      expect(a4.frequency.toStringAsFixed(2), '440.00');
+      // Semitone relationship is preserved regardless of the reference.
+      const Note a5 = Note(9, 5);
+      expect(a5.frequencyOf(442), closeTo(442 * 2, 0.001));
+    });
+
+    test('noteFromFrequency honors a configurable A4 reference', () {
+      // With A4 = 442 Hz, 442 Hz is exactly in tune (0 cents).
+      final TuningReading? inTune = noteFromFrequency(442, a4Reference: 442);
+      expect(inTune, isNotNull);
+      expect(inTune!.nearest, const Note(9, 4));
+      expect(inTune.cents.abs(), lessThan(0.5));
+
+      // With A4 = 442 Hz, 440 Hz is now slightly flat.
+      final TuningReading? flat = noteFromFrequency(440, a4Reference: 442);
+      expect(flat, isNotNull);
+      expect(flat!.nearest, const Note(9, 4));
+      expect(flat.cents, lessThan(0));
+      expect(flat.state, TuningState.flat);
+    });
   });
 }

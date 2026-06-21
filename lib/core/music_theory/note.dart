@@ -17,8 +17,12 @@ class Note {
   /// MIDI note number.
   int get midi => (octave + 1) * 12 + pitchClass;
 
-  /// Frequency in Hz (A4 = 440 Hz, 12-TET).
-  double get frequency => 440 * pow(2, (midi - 69) / 12).toDouble();
+  /// Frequency in Hz for a configurable A4 reference (12-TET).
+  double frequencyOf(double a4Reference) =>
+      a4Reference * pow(2, (midi - 69) / 12).toDouble();
+
+  /// Frequency in Hz using the default A4 = 440 Hz (12-TET).
+  double get frequency => frequencyOf(440);
 
   /// Human-readable name (without octave).
   String name({
@@ -86,14 +90,18 @@ class TuningReading {
 
 enum TuningState { flat, inTune, sharp }
 
-/// Converts a frequency to its nearest [Note] and the cents offset.
+/// Converts a frequency to its nearest [Note] and the cents offset, using a
+/// configurable A4 reference (default 440 Hz).
 ///
 /// Returns null for non-positive frequencies.
-TuningReading? noteFromFrequency(double frequency) {
+TuningReading? noteFromFrequency(
+  double frequency, {
+  double a4Reference = 440,
+}) {
   if (frequency <= 0) {
     return null;
   }
-  final double midiFloat = 69 + 12 * (log(frequency / 440) / ln2);
+  final double midiFloat = 69 + 12 * (log(frequency / a4Reference) / ln2);
   final int midi = midiFloat.round();
   final double cents = (midiFloat - midi) * 100;
   return TuningReading(

@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../settings/settings.dart';
+import '../settings/settings_providers.dart';
 import 'click_player.dart';
 
 /// Available time signatures for the metronome.
@@ -32,14 +34,36 @@ class MetronomeSettings {
 
 class MetronomeSettingsNotifier extends Notifier<MetronomeSettings> {
   @override
-  MetronomeSettings build() => const MetronomeSettings();
+  MetronomeSettings build() {
+    final AppSettings settings = ref.read(settingsProvider);
+    if (!settings.rememberLast) {
+      return const MetronomeSettings();
+    }
+    return MetronomeSettings(
+      bpm: settings.lastBpm.clamp(20, 280),
+      beatsPerBar: settings.lastBeatsPerBar,
+    );
+  }
+
+  /// Live BPM update (e.g. during a slider drag). Updates state only; the
+  /// final value should be committed via [setBpm] (e.g. on `onChangeEnd`).
+  void previewBpm(int value) {
+    state = state.copyWith(bpm: value.clamp(20, 280));
+  }
 
   void setBpm(int value) {
-    state = state.copyWith(bpm: value.clamp(20, 280));
+    final int clamped = value.clamp(20, 280);
+    state = state.copyWith(bpm: clamped);
+    if (ref.read(settingsProvider).rememberLast) {
+      ref.read(settingsProvider.notifier).setLastBpm(clamped);
+    }
   }
 
   void setBeatsPerBar(int value) {
     state = state.copyWith(beatsPerBar: value);
+    if (ref.read(settingsProvider).rememberLast) {
+      ref.read(settingsProvider.notifier).setLastBeatsPerBar(value);
+    }
   }
 
   void togglePlay() {

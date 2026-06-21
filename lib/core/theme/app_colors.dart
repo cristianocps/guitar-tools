@@ -28,6 +28,11 @@ abstract final class AppColors {
   static const Color textSecondary = Color(0xFF8A97A8);
   static const Color textMuted = Color(0xFF5A6675);
 
+  // Glassmorphism surfaces (translucent overlays over the gradient).
+  static const Color glassSurface = Color(0x1AFFFFFF); // ~10% white
+  static const Color glassSurfaceStrong = Color(0x2BFFFFFF); // ~17% white
+  static const Color glassBorder = Color(0x24FFFFFF); // ~14% white
+
   /// Background gradient used app-wide for a depth/glow feel.
   static const LinearGradient backgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
