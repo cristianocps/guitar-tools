@@ -54,6 +54,8 @@ class _MetronomeScreenState extends ConsumerState<MetronomeScreen>
   }
 
   void _startEngine(int bpm, int beatsPerBar) {
+    // Stop any active run first (e.g. BPM/time-sig changed while playing).
+    _ticker.stop();
     final ClickPlayer click = ref.read(clickPlayerProvider);
     _engine = MetronomeEngine(
       onBeat: (int beatNumber, bool accent) {
