@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_providers.dart';
 import '../../core/design_system/app_background.dart';
+import '../../core/design_system/widgets.dart';
 import '../../core/metronome_engine/click_player.dart';
 import '../../core/metronome_engine/metronome_engine.dart';
 import '../../core/metronome_engine/providers.dart';
@@ -124,7 +125,7 @@ class _MetronomeScreenState extends ConsumerState<MetronomeScreen>
         ),
         child: Column(
           children: <Widget>[
-            Text('Metrônomo', style: AppTypography.headline),
+            const ToolHeader(title: 'Metrônomo'),
             const SizedBox(height: AppSpacing.l),
             Expanded(
               child: CustomPaint(
@@ -136,39 +137,58 @@ class _MetronomeScreenState extends ConsumerState<MetronomeScreen>
                 child: const SizedBox.expand(),
               ),
             ),
-              _BpmControl(
-                bpm: settings.bpm,
-                onChanged: (int v) => ref
-                    .read(metronomeSettingsProvider.notifier)
-                    .setBpm(v),
+            GlassCard(
+              child: Column(
+                children: <Widget>[
+                  _BpmControl(
+                    bpm: settings.bpm,
+                    onLiveChange: (int v) => ref
+                        .read(metronomeSettingsProvider.notifier)
+                        .previewBpm(v),
+                    onCommit: (int v) => ref
+                        .read(metronomeSettingsProvider.notifier)
+                        .setBpm(v),
+                  ),
+                  const SizedBox(height: AppSpacing.m),
+                  _TimeSignatureSelector(
+                    beatsPerBar: settings.beatsPerBar,
+                    onChanged: (int v) => ref
+                        .read(metronomeSettingsProvider.notifier)
+                        .setBeatsPerBar(v),
+                  ),
+                ],
               ),
-              const SizedBox(height: AppSpacing.m),
-              _TimeSignatureSelector(
-                beatsPerBar: settings.beatsPerBar,
-                onChanged: (int v) => ref
-                    .read(metronomeSettingsProvider.notifier)
-                    .setBeatsPerBar(v),
-              ),
-              const SizedBox(height: AppSpacing.l),
-              _PlayButton(
-                isPlaying: settings.isPlaying,
-                onTap: () => ref
-                    .read(metronomeSettingsProvider.notifier)
-                    .togglePlay(),
-              ),
-              const SizedBox(height: AppSpacing.m),
-            ],
-          ),
+            ),
+            const SizedBox(height: AppSpacing.l),
+            AppButton(
+              label: settings.isPlaying ? 'Parar' : 'Iniciar',
+              icon: settings.isPlaying
+                  ? Icons.stop_rounded
+                  : Icons.play_arrow_rounded,
+              backgroundColor:
+                  settings.isPlaying ? AppColors.sharp : AppColors.primary,
+              onPressed: () => ref
+                  .read(metronomeSettingsProvider.notifier)
+                  .togglePlay(),
+            ),
+            const SizedBox(height: AppSpacing.m),
+          ],
         ),
+      ),
     );
   }
 }
 
 class _BpmControl extends StatelessWidget {
-  const _BpmControl({required this.bpm, required this.onChanged});
+  const _BpmControl({
+    required this.bpm,
+    required this.onLiveChange,
+    required this.onCommit,
+  });
 
   final int bpm;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<int> onLiveChange;
+  final ValueChanged<int> onCommit;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +200,7 @@ class _BpmControl extends StatelessWidget {
           textBaseline: TextBaseline.alphabetic,
           children: <Widget>[
             IconButton.filled(
-              onPressed: () => onChanged(bpm - 1),
+              onPressed: () => onCommit(bpm - 1),
               icon: const Icon(Icons.remove),
             ),
             const SizedBox(width: AppSpacing.l),
@@ -189,7 +209,7 @@ class _BpmControl extends StatelessWidget {
             Text('BPM', style: AppTypography.body),
             const SizedBox(width: AppSpacing.l),
             IconButton.filled(
-              onPressed: () => onChanged(bpm + 1),
+              onPressed: () => onCommit(bpm + 1),
               icon: const Icon(Icons.add),
             ),
           ],
@@ -200,7 +220,8 @@ class _BpmControl extends StatelessWidget {
           max: 280,
           divisions: 260,
           activeColor: AppColors.primary,
-          onChanged: (double v) => onChanged(v.round()),
+          onChanged: (double v) => onLiveChange(v.round()),
+          onChangeEnd: (double v) => onCommit(v.round()),
         ),
       ],
     );
@@ -222,52 +243,12 @@ class _TimeSignatureSelector extends StatelessWidget {
       spacing: AppSpacing.s,
       children: availableBeatsPerBar.map((int bpb) {
         final bool selected = bpb == beatsPerBar;
-        return ChoiceChip(
-          label: Text('$bpb/4'),
+        return AppChip(
+          label: '$bpb/4',
           selected: selected,
-          selectedColor: AppColors.primary,
           onSelected: (_) => onChanged(bpb),
         );
       }).toList(),
-    );
-  }
-}
-
-class _PlayButton extends StatelessWidget {
-  const _PlayButton({required this.isPlaying, required this.onTap});
-
-  final bool isPlaying;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.m,
-        ),
-        decoration: BoxDecoration(
-          color: isPlaying ? AppColors.sharp : AppColors.primary,
-          borderRadius: BorderRadius.circular(AppRadius.full),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
-              size: 32,
-              color: AppColors.background,
-            ),
-            const SizedBox(width: AppSpacing.s),
-            Text(
-              isPlaying ? 'Parar' : 'Iniciar',
-              style: AppTypography.title.copyWith(color: AppColors.background),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

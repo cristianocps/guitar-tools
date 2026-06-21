@@ -8,9 +8,11 @@ import '../../core/audio/permission_provider.dart';
 import '../../core/audio/pitch_detector.dart';
 import '../../core/audio/providers.dart';
 import '../../core/design_system/app_background.dart';
-import '../../core/design_system/glow.dart';
-import '../../core/music_theory/guitar_tuning.dart';
+import '../../core/design_system/widgets.dart';
 import '../../core/music_theory/note.dart';
+import '../../core/music_theory/pitch.dart';
+import '../../core/music_theory/tuning.dart';
+import '../../core/settings/settings_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
@@ -65,8 +67,13 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
     if (event == null || !event.hasPitch) {
       return TunerView.empty;
     }
+    final double a4 = ref.read(a4ReferenceProvider);
+    final Notation notation = ref.read(notationProvider);
+    final List<GuitarString> strings =
+        ref.read(selectedTuningProvider).tuning.strings;
     final double freq = event.frequency;
-    final TuningReading? reading = noteFromFrequency(freq);
+    final TuningReading? reading =
+        noteFromFrequency(freq, a4Reference: a4);
     if (reading == null) {
       return TunerView.empty;
     }
@@ -74,22 +81,23 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
 
     if (_mode == TunerMode.chromatic) {
       return TunerView(
-        noteName: reading.nearest.name(),
+        noteName: reading.nearest.name(notation: notation),
         octave: '${reading.nearest.octave}',
         cents: reading.cents,
         state: reading.state,
-        activeStringIndex: _matchString(reading.nearest.pitchClass),
+        activeStringIndex: _matchString(strings, reading.nearest.pitchClass),
         intensity: intensity,
         hasPitch: true,
       );
     }
 
     // String mode: compare to the selected target string.
-    final GuitarString target = standardTuning[_selectedString];
-    final double centsToTarget = 1200 * log(freq / target.frequency) / ln2;
+    final GuitarString target = strings[_selectedString];
+    final double centsToTarget =
+        1200 * log(freq / target.frequencyOf(a4)) / ln2;
     final bool inTune = centsToTarget.abs() <= 5;
     return TunerView(
-      noteName: target.note.name(),
+      noteName: target.note.name(notation: notation),
       octave: '${target.note.octave}',
       cents: centsToTarget,
       state: inTune
@@ -101,9 +109,9 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
     );
   }
 
-  int? _matchString(int pitchClass) {
-    for (int i = 0; i < standardTuning.length; i++) {
-      if (standardTuning[i].note.pitchClass == pitchClass) {
+  int? _matchString(List<GuitarString> strings, int pitchClass) {
+    for (int i = 0; i < strings.length; i++) {
+      if (strings[i].note.pitchClass == pitchClass) {
         return i;
       }
     }
@@ -147,7 +155,7 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
         child: Column(
           children: <Widget>[
             const SizedBox(height: AppSpacing.s),
-            SegmentedButton<TunerMode>(
+            AppSegmented<TunerMode>(
               segments: const <ButtonSegment<TunerMode>>[
                 ButtonSegment<TunerMode>(
                   value: TunerMode.chromatic,
@@ -159,7 +167,7 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
                 ),
               ],
               selected: <TunerMode>{_mode},
-              onSelectionChanged: (Set<TunerMode> s) => _selectMode(s.first),
+              onChanged: _selectMode,
             ),
             const SizedBox(height: AppSpacing.l),
             Expanded(
@@ -202,6 +210,7 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
           children: <Widget>[
             _StringPicker(
               mode: _mode,
+              strings: ref.watch(selectedTuningProvider).tuning.strings,
               selectedIndex: _selectedString,
               onSelect: _selectString,
             ),
@@ -294,11 +303,13 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
 class _StringPicker extends StatelessWidget {
   const _StringPicker({
     required this.mode,
+    required this.strings,
     required this.selectedIndex,
     required this.onSelect,
   });
 
   final TunerMode mode;
+  final List<GuitarString> strings;
   final int selectedIndex;
   final ValueChanged<int> onSelect;
 
@@ -311,11 +322,10 @@ class _StringPicker extends StatelessWidget {
       spacing: AppSpacing.s,
       runSpacing: AppSpacing.s,
       children: <Widget>[
-        for (int i = 0; i < standardTuning.length; i++)
-          ChoiceChip(
-            label: Text(standardTuning[i].commonName),
+        for (int i = 0; i < strings.length; i++)
+          AppChip(
+            label: strings[i].commonName,
             selected: i == selectedIndex,
-            selectedColor: AppColors.primary,
             onSelected: (_) => onSelect(i),
           ),
       ],
@@ -347,8 +357,7 @@ class _NoteDisplay extends StatelessWidget {
       label: view.hasPitch
           ? 'Nota ${view.noteName} ${view.octave}, $centsLabel cents'
           : 'Nenhuma nota detectada',
-      child: NeonGlow(
-        color: color.withOpacity(0.4),
+      child: GlassCard(
         child: Column(
           children: <Widget>[
             Row(

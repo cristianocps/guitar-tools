@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import '../../core/music_theory/guitar_tuning.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Draws six guitar strings (low E at top → high E at bottom). The active
@@ -13,7 +12,7 @@ class StringVisualizerPainter extends CustomPainter {
     required this.intensity,
   });
 
-  /// Index into [standardTuning] (0 = low E), or null for none.
+  /// Index into the active tuning's strings (0 = low E), or null for none.
   final int? activeIndex;
 
   /// 0..1 vibration intensity for the active string.

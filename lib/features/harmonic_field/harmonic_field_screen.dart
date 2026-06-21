@@ -6,10 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/audio/pitch_detector.dart';
 import '../../core/audio/providers.dart';
 import '../../core/design_system/app_background.dart';
-import '../../core/design_system/glow.dart';
+import '../../core/design_system/widgets.dart';
 import '../../core/music_theory/harmonic_field.dart';
 import '../../core/music_theory/note.dart';
 import '../../core/music_theory/pitch.dart';
+import '../../core/settings/settings_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
@@ -38,7 +39,10 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
           if (!e.hasPitch || e.confidence < 0.85) {
             return;
           }
-          final TuningReading? reading = noteFromFrequency(e.frequency);
+          final TuningReading? reading = noteFromFrequency(
+            e.frequency,
+            a4Reference: ref.read(a4ReferenceProvider),
+          );
           if (reading == null) {
             return;
           }
@@ -51,6 +55,7 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
     });
 
     final HarmonicField field = HarmonicField.of(_tonic, _mode);
+    final Notation notation = ref.watch(notationProvider);
 
     return AppBackground(
       child: Padding(
@@ -61,9 +66,9 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
         child: Column(
           children: <Widget>[
             const SizedBox(height: AppSpacing.s),
-            Text('Campo Harmônico', style: AppTypography.headline),
+            const ToolHeader(title: 'Campo Harmônico'),
             const SizedBox(height: AppSpacing.s),
-            SegmentedButton<ScaleType>(
+            AppSegmented<ScaleType>(
               segments: const <ButtonSegment<ScaleType>>[
                 ButtonSegment<ScaleType>(
                   value: ScaleType.major,
@@ -75,8 +80,7 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
                 ),
               ],
               selected: <ScaleType>{_mode},
-              onSelectionChanged: (Set<ScaleType> s) =>
-                  setState(() => _mode = s.first),
+              onChanged: (ScaleType s) => setState(() => _mode = s),
             ),
             const SizedBox(height: AppSpacing.m),
             Expanded(
@@ -111,10 +115,12 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
             _DegreeDetails(
               field: field,
               selectedIndex: _selectedDegree,
+              notation: notation,
             ),
             const SizedBox(height: AppSpacing.s),
             _NoteSelector(
               selected: _tonic,
+              notation: notation,
               onSelect: (int pc) => setState(() => _tonic = pc),
             ),
             const SizedBox(height: AppSpacing.m),
@@ -145,10 +151,15 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
 }
 
 class _DegreeDetails extends StatelessWidget {
-  const _DegreeDetails({required this.field, required this.selectedIndex});
+  const _DegreeDetails({
+    required this.field,
+    required this.selectedIndex,
+    required this.notation,
+  });
 
   final HarmonicField field;
   final int? selectedIndex;
+  final Notation notation;
 
   @override
   Widget build(BuildContext context) {
@@ -164,37 +175,38 @@ class _DegreeDetails extends StatelessWidget {
     }
     final HarmonicDegree degree = field.degrees[selectedIndex!];
     final String notes = degree.chord.pitchClasses
-        .map((int pc) => PitchNames.name(pc))
+        .map((int pc) => PitchNames.name(pc, notation: notation))
         .join('  ');
 
-    return NeonGlow(
-      color: AppColors.primary.withOpacity(0.3),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: AppSpacing.s,
-          horizontal: AppSpacing.m,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              '${degree.romanNumeral}  ·  ',
-              style: AppTypography.title.copyWith(color: AppColors.primary),
-            ),
-            Text(degree.chord.name(), style: AppTypography.headline),
-            const SizedBox(width: AppSpacing.m),
-            Text(notes, style: AppTypography.body),
-          ],
-        ),
+    return GlassCard(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            '${degree.romanNumeral}  ·  ',
+            style: AppTypography.title.copyWith(color: AppColors.primary),
+          ),
+          Text(
+            degree.chord.name(notation: notation),
+            style: AppTypography.headline,
+          ),
+          const SizedBox(width: AppSpacing.m),
+          Text(notes, style: AppTypography.body),
+        ],
       ),
     );
   }
 }
 
 class _NoteSelector extends StatelessWidget {
-  const _NoteSelector({required this.selected, required this.onSelect});
+  const _NoteSelector({
+    required this.selected,
+    required this.notation,
+    required this.onSelect,
+  });
 
   final int selected;
+  final Notation notation;
   final ValueChanged<int> onSelect;
 
   @override
@@ -206,10 +218,9 @@ class _NoteSelector extends StatelessWidget {
           for (int pc = 0; pc < 12; pc++)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: ChoiceChip(
-                label: Text(PitchNames.name(pc)),
+              child: AppChip(
+                label: PitchNames.name(pc, notation: notation),
                 selected: pc == selected,
-                selectedColor: AppColors.primary,
                 onSelected: (_) => onSelect(pc),
               ),
             ),
