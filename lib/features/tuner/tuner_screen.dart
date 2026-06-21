@@ -176,6 +176,25 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
   }
 
   Widget _buildTuner() {
+    final AsyncValue<PitchEvent> pitchAsync = ref.watch(pitchStreamProvider);
+
+    // Surface capture errors instead of failing silently.
+    return pitchAsync.when(
+      loading: () => _buildTunerBody(listening: false, hint: 'Iniciando microfone…'),
+      error: (Object err, _) => _buildTunerBody(
+        listening: false,
+        hint: 'Erro no microfone: $err',
+        isError: true,
+      ),
+      data: (_) => _buildTunerBody(listening: true, hint: 'Toque uma nota…'),
+    );
+  }
+
+  Widget _buildTunerBody({
+    required bool listening,
+    required String hint,
+    bool isError = false,
+  }) {
     return ValueListenableBuilder<TunerView>(
       valueListenable: _view,
       builder: (BuildContext context, TunerView v, _) {
@@ -199,6 +218,26 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
                 ),
                 child: const SizedBox.expand(),
               ),
+            ),
+            const SizedBox(height: AppSpacing.s),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  listening ? Icons.graphic_eq : Icons.mic_none_rounded,
+                  size: 16,
+                  color: isError
+                      ? AppColors.sharp
+                      : (listening ? AppColors.primary : AppColors.textMuted),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                Text(
+                  hint,
+                  style: AppTypography.caption.copyWith(
+                    color: isError ? AppColors.sharp : AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.l),
             Expanded(

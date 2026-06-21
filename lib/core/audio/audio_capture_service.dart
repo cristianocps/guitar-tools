@@ -29,42 +29,49 @@ class RecordAudioCaptureService implements AudioCaptureService {
   final int sampleRate;
 
   final AudioRecorder _recorder = AudioRecorder();
-  StreamSubscription<Uint8List>? _subscription;
   bool _running = false;
+  // Serializes start/stop so a rebuild (auto-dispose) can't start a new
+  // capture before the previous one finished stopping.
+  Future<void> _op = Future<void>.value();
+
+  Future<T> _serialize<T>(Future<T> Function() task) {
+    final Future<T> future = _op.then((_) => task());
+    // Keep the chain alive regardless of errors so it never breaks.
+    _op = future.then<void>((_) {}, onError: (Object _) {});
+    return future;
+  }
 
   @override
   Future<bool> hasPermission() => _recorder.hasPermission();
 
   @override
-  Future<Stream<Uint8List>> start() async {
-    if (_running) {
-      throw StateError('Audio capture already running');
-    }
-    _running = true;
-    return _recorder.startStream(
-      RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: sampleRate,
-        numChannels: 1,
-        autoGain: false,
-        echoCancel: false,
-        noiseSuppress: false,
-      ),
-    );
-  }
+  Future<Stream<Uint8List>> start() => _serialize(() async {
+        if (_running) {
+          throw StateError('Audio capture already running');
+        }
+        _running = true;
+        return _recorder.startStream(
+          RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: sampleRate,
+            numChannels: 1,
+            autoGain: false,
+            echoCancel: false,
+            noiseSuppress: false,
+          ),
+        );
+      });
 
   @override
-  Future<void> stop() async {
-    if (!_running) {
-      return;
-    }
-    _running = false;
-    await _subscription?.cancel();
-    _subscription = null;
-    if (await _recorder.isRecording()) {
-      await _recorder.stop();
-    }
-  }
+  Future<void> stop() => _serialize(() async {
+        if (!_running) {
+          return;
+        }
+        _running = false;
+        if (await _recorder.isRecording()) {
+          await _recorder.stop();
+        }
+      });
 
   @override
   Future<void> dispose() async {
