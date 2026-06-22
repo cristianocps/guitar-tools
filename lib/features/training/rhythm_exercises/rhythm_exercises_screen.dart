@@ -153,8 +153,8 @@ class _RhythmStage extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: color.withValues(alpha: 0.08),
-            border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+            color: color.withOpacity(0.08),
+            border: Border.all(color: color.withOpacity(0.5), width: 2),
           ),
           child: center,
         ),
