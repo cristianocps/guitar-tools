@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/app_providers.dart';
 import 'audio_capture_service.dart';
+import 'guitar_synth.dart';
 import 'permission_provider.dart';
 import 'pitch_challenge_validator.dart';
 import 'pitch_detector.dart';
@@ -66,6 +67,9 @@ final pitchStreamProvider = StreamProvider.autoDispose<PitchEvent>((Ref ref) {
 final pitchChallengeValidatorProvider = Provider<PitchChallengeValidator>(
   (Ref ref) => const PitchChallengeValidator(),
 );
+
+/// Shared [GuitarSynth] that lazily loads and caches the bundled SoundFonts.
+final guitarSynthProvider = Provider<GuitarSynth>((Ref ref) => GuitarSynth());
 
 /// Factory provider for [RhythmDetector] instances.
 final rhythmDetectorProvider = Provider.autoDispose<RhythmDetector>((Ref ref) {

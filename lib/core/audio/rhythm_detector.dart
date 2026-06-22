@@ -4,10 +4,14 @@ import 'dart:typed_data';
 
 /// Emitted when an onset (transient) is detected in the audio stream.
 class OnsetEvent {
-  OnsetEvent({required this.timestamp});
+  OnsetEvent({required this.position});
 
-  /// System timestamp when the onset was detected.
-  final DateTime timestamp;
+  /// Time of the onset measured from the start of the audio stream.
+  ///
+  /// Derived from the sample index (not wall-clock at chunk-processing time),
+  /// so the relative spacing between onsets reflects the audio itself and is
+  /// immune to capture buffering / chunk size — essential for rhythm scoring.
+  final Duration position;
 }
 
 /// Detects rhythmic onsets in a raw PCM16 mono audio stream.
@@ -46,9 +50,30 @@ class RhythmDetector {
 
   Stream<OnsetEvent> get onsets => _onsetController.stream;
 
-  DateTime? _lastOnset;
+  int _samplesSeen = 0;
+  Duration? _lastOnset;
   double _baseline = 0;
   bool _armed = true;
+  Duration _detectFrom = Duration.zero;
+
+  /// Ignores (does not emit) any onset before [position] (measured from the
+  /// stream start), while still tracking the energy baseline. Use this to keep
+  /// the metronome's count-in clicks from being reported as the user's notes:
+  /// detection only begins once scoring starts.
+  void detectFrom(Duration position) {
+    _detectFrom = position;
+  }
+
+  /// Resets the stream clock and detector state. Call this right before a new
+  /// capture stream begins (e.g. when (re)starting an exercise), so onset
+  /// positions are measured from that stream's first sample.
+  void reset() {
+    _samplesSeen = 0;
+    _lastOnset = null;
+    _baseline = 0;
+    _armed = true;
+    _detectFrom = Duration.zero;
+  }
 
   /// Feeds a chunk of PCM16 bytes and emits onsets when detected.
   void processChunk(Uint8List bytes) {
@@ -61,6 +86,7 @@ class RhythmDetector {
       final int end = min(start + frameSize, n);
       _processFrame(samples, start, end);
     }
+    _samplesSeen += n;
   }
 
   void _processFrame(Float64List samples, int start, int end) {
@@ -77,14 +103,16 @@ class RhythmDetector {
 
     final bool loudEnough = energy > noiseFloor;
     final bool isRise = energy > _baseline * riseFactor;
-    final DateTime now = DateTime.now();
+    final Duration pos = Duration(
+      microseconds: ((_samplesSeen + start) * 1000000 / sampleRate).round(),
+    );
     final bool cooldownOk = _lastOnset == null ||
-        now.difference(_lastOnset!).inMilliseconds >= cooldownMs;
+        (pos - _lastOnset!).inMilliseconds >= cooldownMs;
 
-    if (loudEnough && isRise && _armed && cooldownOk) {
-      _lastOnset = now;
+    if (loudEnough && isRise && _armed && cooldownOk && pos >= _detectFrom) {
+      _lastOnset = pos;
       _armed = false;
-      _onsetController.add(OnsetEvent(timestamp: now));
+      _onsetController.add(OnsetEvent(position: pos));
     }
 
     // Re-arm once the energy falls back near the running baseline, so the next

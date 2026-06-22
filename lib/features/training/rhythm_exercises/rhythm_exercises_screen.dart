@@ -49,7 +49,7 @@ class RhythmExercisesScreen extends StatelessWidget {
       appBar: AppBar(title: Text(definition.title)),
       body: MicPermissionGate(
         message:
-            'Tocamos o metrônomo e ouvimos você tocar junto para medir seu ritmo.',
+            'Você ouve uma contagem de 1 compasso e depois toca o ritmo; ouvimos pelo microfone para medir sua precisão.',
         child: _RhythmBody(definition: definition),
       ),
     );
@@ -121,7 +121,7 @@ class _RhythmStage extends StatelessWidget {
         center = Icon(Icons.music_note, size: 64, color: color);
       case RhythmResult.countIn:
         color = AppColors.primary;
-        caption = 'Ouça o metrônomo';
+        caption = 'Ouça o tempo (1 compasso)';
         center = Text(
           '${state.countInValue}',
           style: theme.textTheme.displayLarge?.copyWith(
@@ -131,7 +131,7 @@ class _RhythmStage extends StatelessWidget {
         );
       case RhythmResult.playing:
         color = AppColors.primary;
-        caption = 'Toque junto!';
+        caption = 'Toque o ritmo (sem metrônomo)';
         center = Icon(Icons.graphic_eq, size: 64, color: color);
       case RhythmResult.finished:
         color = AppColors.inTune;
@@ -222,7 +222,7 @@ class _ActionButton extends StatelessWidget {
         return FilledButton.icon(
           onPressed: null,
           icon: const Icon(Icons.mic),
-          label: const Text('Toque junto!'),
+          label: const Text('Toque o ritmo!'),
         );
       case RhythmResult.finished:
         return FilledButton.icon(

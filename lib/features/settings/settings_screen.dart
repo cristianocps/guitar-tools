@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/guitar_synth.dart';
 import '../../core/design_system/app_background.dart';
 import '../../core/design_system/widgets.dart';
 import '../../core/music_theory/pitch.dart';
@@ -68,6 +69,20 @@ class SettingsScreen extends ConsumerWidget {
                       onChanged: (TuningPresetId v) => ref
                           .read(settingsProvider.notifier)
                           .setDefaultTuningPreset(v),
+                    ),
+                    const SizedBox(height: AppSpacing.l),
+                    const SectionTitle('Som dos exercícios'),
+                    const SizedBox(height: AppSpacing.s),
+                    Text(
+                      'Timbre usado para tocar as notas no Treino.',
+                      style: AppTypography.caption,
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    _GuitarToneSelector(
+                      value: settings.guitarTone,
+                      onChanged: (GuitarTone v) => ref
+                          .read(settingsProvider.notifier)
+                          .setGuitarTone(v),
                     ),
                   ],
                 ),
@@ -144,6 +159,29 @@ class _NotationSelector extends StatelessWidget {
       ],
       selected: <Notation>{value},
       onChanged: onChanged,
+    );
+  }
+}
+
+class _GuitarToneSelector extends StatelessWidget {
+  const _GuitarToneSelector({required this.value, required this.onChanged});
+
+  final GuitarTone value;
+  final ValueChanged<GuitarTone> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.s,
+      runSpacing: AppSpacing.s,
+      children: <Widget>[
+        for (final GuitarTone tone in GuitarTone.values)
+          AppChip(
+            label: tone.label,
+            selected: tone == value,
+            onSelected: (_) => onChanged(tone),
+          ),
+      ],
     );
   }
 }

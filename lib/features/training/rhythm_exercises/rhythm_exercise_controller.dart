@@ -15,7 +15,7 @@ import 'rhythm_pattern_catalog.dart';
 class RhythmSessionState {
   RhythmSessionState({
     required this.definition,
-    this.expectedBeats = const <DateTime>[],
+    this.expectedBeats = const <Duration>[],
     this.onsetCount = 0,
     this.hits = 0,
     this.result = RhythmResult.idle,
@@ -25,7 +25,10 @@ class RhythmSessionState {
   });
 
   final ExerciseDefinition definition;
-  final List<DateTime> expectedBeats;
+
+  /// Stream positions (from the audio stream start) where a played onset is
+  /// expected, used to score the player against the pattern.
+  final List<Duration> expectedBeats;
   final int onsetCount;
   final int hits;
   final RhythmResult result;
@@ -42,7 +45,7 @@ class RhythmSessionState {
       expectedBeats.isEmpty ? 0 : hits / expectedBeats.length;
 
   RhythmSessionState copyWith({
-    List<DateTime>? expectedBeats,
+    List<Duration>? expectedBeats,
     int? onsetCount,
     int? hits,
     RhythmResult? result,
@@ -80,11 +83,13 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
         _rhythmDetector = rhythmDetector,
         _capture = capture,
         _repository = repository,
-        super(RhythmSessionState(definition: definition)) {
-    unawaited(start());
-  }
+        super(RhythmSessionState(definition: definition));
 
   static const int _toleranceMs = 140;
+
+  /// Extra time after the last expected beat before finishing, so the final
+  /// note's (buffered) onset still has time to be captured and scored.
+  static const int _tailGuardMs = 450;
 
   /// Count-in length (one 4/4 bar) the user hears before scoring begins.
   static const int _beatsPerBar = 4;
@@ -103,6 +108,8 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
   RhythmPattern? _pattern;
   double _beatDurationMs = 500;
   double _countInMs = 0;
+  double _clickIntervalMs = 500;
+  int _clicksPerBar = 4;
 
   @override
   void dispose() {
@@ -124,11 +131,24 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
     _countInMs = _beatsPerBar * _beatDurationMs;
     _pattern = RhythmPatternCatalog.patternFor(state.definition);
 
-    _engine
-      ..setBeatsPerBar(_beatsPerBar)
-      ..setBpm(bpm)
-      ..start(now: Duration.zero);
-    _lastBeat = 0;
+    // Click the pattern's smallest note value (its base grid) during the
+    // count-in, so the audible pulse matches the rate the notes must be played
+    // at. A plain beat-rate click feels much slower than e.g. eighths/triplets,
+    // which is why the metronome seemed out of sync with the exercise. Clicks
+    // are scheduled directly from this interval (not via the metronome engine)
+    // so fast grids like sixteenths aren't capped by the engine's max BPM.
+    final double subdivision =
+        _pattern!.durations.reduce((double a, double b) => a < b ? a : b);
+    _clickIntervalMs = subdivision * _beatDurationMs;
+    _clicksPerBar = (_beatsPerBar / subdivision).round();
+    _lastBeat = -1;
+
+    // Reset the detector's stream clock so onset positions are measured from
+    // this capture's first sample, and only score onsets once the count-in bar
+    // has elapsed (so the metronome clicks are never counted as notes).
+    _rhythmDetector
+      ..reset()
+      ..detectFrom(Duration(milliseconds: _countInMs.round()));
 
     // Start capturing immediately so the mic is warm, but only score onsets
     // once the count-in finishes.
@@ -143,7 +163,7 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
       countInValue: 1,
       onsetCount: 0,
       hits: 0,
-      expectedBeats: const <DateTime>[],
+      expectedBeats: const <Duration>[],
     );
 
     _timer = Timer.periodic(const Duration(milliseconds: 16), _tick);
@@ -154,10 +174,15 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
       return;
     }
     final int elapsed = DateTime.now().difference(_startedAt!).inMilliseconds;
-    _engine.processFrame(Duration(milliseconds: elapsed));
-    if (_engine.currentBeat != _lastBeat) {
-      _lastBeat = _engine.currentBeat;
-      _clickPlayer.play(accent: _engine.isCurrentBeatAccent);
+    // Only click during the count-in. Once scoring starts the click would be
+    // picked up by the mic (it lands exactly on the beats) and counted as a
+    // note the user played, so we go silent and let them keep the tempo.
+    if (elapsed < _countInMs) {
+      final int gridIndex = (elapsed / _clickIntervalMs).floor();
+      if (gridIndex != _lastBeat) {
+        _lastBeat = gridIndex;
+        _clickPlayer.play(accent: gridIndex % _clicksPerBar == 0);
+      }
     }
 
     // Count-in phase: let the player hear a full bar before scoring.
@@ -175,14 +200,14 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
 
     // Transition into the scored phase exactly once.
     if (!state.isPlaying) {
-      final DateTime scoringStart =
-          _startedAt!.add(Duration(milliseconds: _countInMs.round()));
-      final List<DateTime> expected = <DateTime>[];
-      DateTime next = scoringStart;
+      // Expected onsets as positions in the audio-stream timeline (which starts
+      // with the count-in), so they line up with the onset positions the
+      // detector reports.
+      final List<Duration> expected = <Duration>[];
+      double posMs = _countInMs;
       for (final double duration in _pattern!.durations) {
-        expected.add(next);
-        next = next
-            .add(Duration(milliseconds: (duration * _beatDurationMs).round()));
+        expected.add(Duration(milliseconds: posMs.round()));
+        posMs += duration * _beatDurationMs;
       }
       state = state.copyWith(
         isPlaying: true,
@@ -193,11 +218,8 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
     }
 
     state = state.copyWith(elapsedMs: elapsed - _countInMs.round());
-    if (DateTime.now().isAfter(
-      state.expectedBeats.last.add(
-        const Duration(milliseconds: _toleranceMs),
-      ),
-    )) {
+    final int lastBeatMs = state.expectedBeats.last.inMilliseconds;
+    if (elapsed > lastBeatMs + _toleranceMs + _tailGuardMs) {
       _finish();
     }
   }
@@ -208,10 +230,10 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
     if (!state.isPlaying) {
       return;
     }
-    final DateTime onsetTime = event.timestamp;
+    final Duration onset = event.position;
     bool matched = false;
-    for (final DateTime expected in state.expectedBeats) {
-      if (onsetTime.difference(expected).inMilliseconds.abs() <= _toleranceMs) {
+    for (final Duration expected in state.expectedBeats) {
+      if ((onset - expected).inMilliseconds.abs() <= _toleranceMs) {
         matched = true;
         break;
       }

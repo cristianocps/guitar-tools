@@ -1,9 +1,10 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/guitar_synth.dart';
 import '../../../core/audio/mic_permission_gate.dart';
 import '../../../core/audio/providers.dart';
+import '../../../core/settings/settings_providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/training/models/exercise_definition.dart';
 import '../../../core/training/providers/training_providers.dart';
@@ -16,9 +17,10 @@ final _earTrainingControllerProvider = StateNotifierProvider.autoDispose
   final pitchStream = ref.watch(rawPitchStreamProvider);
   final validator = ref.watch(pitchChallengeValidatorProvider);
   final repository = ref.watch(trainingProgressRepositoryProvider);
-  // Tones are generated as in-memory WAV and played via BytesSource, which the
-  // low-latency (SoundPool) backend rejects — use the media player mode.
-  final player = AudioPlayer()..setPlayerMode(PlayerMode.mediaPlayer);
+  final player = InstrumentPlayer(
+    synth: ref.watch(guitarSynthProvider),
+    tone: ref.watch(guitarToneProvider),
+  );
 
   final controller = EarTrainingController(
     definition: definition,
@@ -68,14 +70,15 @@ class _EarTrainingBody extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(
-              'Ouça o intervalo e toque a 2ª nota',
+              'Descubra a 2ª nota de ouvido',
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Use “Repetir” para ouvir de novo, depois reproduza a nota mais '
-              'aguda no seu instrumento.',
+              'Soam duas notas: a 1ª é a referência (mostrada abaixo) e a 2ª é '
+              'a resposta. Guarde a distância entre elas, descubra a 2ª e '
+              'toque-a no instrumento. Toque em “Repetir” para ouvir de novo.',
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -88,10 +91,13 @@ class _EarTrainingBody extends ConsumerWidget {
             const SizedBox(height: 32),
             Text(
               state.challenge != null
-                  ? '${pitchClassName(state.challenge!.root.pitchClass)} → ?'
+                  ? '1ª: ${pitchClassName(state.challenge!.root.pitchClass)}   →   2ª: ?'
                   : '',
-              style: Theme.of(context).textTheme.displayMedium,
+              style: Theme.of(context).textTheme.headlineMedium,
+              textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 16),
+            _PhaseBanner(state: state),
             const SizedBox(height: 16),
             Text(
               'Detectado: ${state.detectedNote ?? '-'}',
@@ -133,6 +139,43 @@ class _EarTrainingBody extends ConsumerWidget {
           ],
         ),
       );
+  }
+}
+
+/// Tells the user, at a glance, whether the app is currently playing the
+/// interval or waiting for them to play the answer.
+class _PhaseBanner extends StatelessWidget {
+  const _PhaseBanner({required this.state});
+
+  final EarTrainingSessionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.result == EarTrainingResult.finished) {
+      return const SizedBox.shrink();
+    }
+
+    final bool listening = state.isListening;
+    final Color color = listening ? AppColors.inTune : AppColors.primary;
+    final IconData icon = listening ? Icons.graphic_eq : Icons.volume_up;
+    final String label = listening
+        ? 'Sua vez — toque a 2ª nota'
+        : 'Ouça o intervalo...';
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Icon(icon, color: color),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(color: color, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
   }
 }
 

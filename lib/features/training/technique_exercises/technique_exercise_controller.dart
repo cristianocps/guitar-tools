@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/guitar_synth.dart';
 import '../../../core/audio/pitch_challenge_validator.dart';
 import '../../../core/audio/pitch_detector.dart';
-import '../../../core/audio/tone_cache.dart';
-import '../../../core/audio/tone_generator.dart';
 import '../../../core/metronome_engine/click_player.dart';
 import '../../../core/metronome_engine/metronome_engine.dart';
 import '../../../core/music_theory/note.dart';
@@ -78,14 +75,14 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
     required TrainingProgressRepository repository,
     required MetronomeEngine engine,
     required ClickPlayer clickPlayer,
-    required AudioPlayer player,
+    required InstrumentPlayer player,
     required this.onFinished,
   })  : _pitchStream = pitchStream,
         _validator = validator,
         _repository = repository,
         _engine = engine,
         _clickPlayer = clickPlayer,
-        _player = player,
+        _instrument = player,
         super(
           TechniqueSessionState(
             definition: definition,
@@ -95,14 +92,12 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
     _initEngine();
   }
 
-  static const int _sampleRate = 44100;
-
   final Stream<PitchEvent> _pitchStream;
   final PitchChallengeValidator _validator;
   final TrainingProgressRepository _repository;
   final MetronomeEngine _engine;
   final ClickPlayer _clickPlayer;
-  final AudioPlayer _player;
+  final InstrumentPlayer _instrument;
   final VoidCallback onFinished;
 
   StreamSubscription<PitchEvent>? _subscription;
@@ -114,7 +109,7 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
     _subscription?.cancel();
     _engine.stop();
     _clickPlayer.dispose();
-    _player.dispose();
+    _instrument.dispose();
     super.dispose();
   }
 
@@ -153,6 +148,11 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
   int _lastBeat = 0;
 
   void _onPitch(PitchEvent event) {
+    // Ignore the mic while the guide note is sounding, so the device's own
+    // playback isn't counted as the user playing it.
+    if (_instrument.isOutputActive) {
+      return;
+    }
     final Note? expected = state.currentNote;
     if (!event.hasPitch || expected == null) {
       return;
@@ -226,13 +226,7 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
     if (note == null) {
       return;
     }
-    final Uint8List wav = ToneGenerator.buildTone(
-      frequency: note.frequency,
-      sampleRate: _sampleRate,
-      duration: 0.4,
-    );
-    final String path = await writeTempWav(wav);
-    await _player.play(DeviceFileSource(path));
+    await _instrument.playMidi(note.midi, duration: 0.6);
   }
 }
 

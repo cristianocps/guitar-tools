@@ -1,3 +1,4 @@
+import '../audio/guitar_synth.dart';
 import '../music_theory/pitch.dart';
 import '../music_theory/tuning.dart';
 
@@ -11,6 +12,7 @@ class AppSettings {
     this.lastTabIndex = 0,
     this.lastBpm = defaultBpm,
     this.lastBeatsPerBar = defaultBeatsPerBar,
+    this.guitarTone = GuitarTone.acoustic,
   });
 
   static const double defaultA4 = 440;
@@ -40,6 +42,9 @@ class AppSettings {
   /// Last metronome beats-per-bar (restored when [rememberLast] is true).
   final int lastBeatsPerBar;
 
+  /// Guitar timbre (SoundFont) used to play notes in the training exercises.
+  final GuitarTone guitarTone;
+
   /// Clamps an A4 value to the supported range.
   static double clampA4(double value) =>
       value.clamp(minA4, maxA4).toDouble();
@@ -52,6 +57,7 @@ class AppSettings {
     int? lastTabIndex,
     int? lastBpm,
     int? lastBeatsPerBar,
+    GuitarTone? guitarTone,
   }) {
     return AppSettings(
       a4Reference: a4Reference ?? this.a4Reference,
@@ -61,6 +67,7 @@ class AppSettings {
       lastTabIndex: lastTabIndex ?? this.lastTabIndex,
       lastBpm: lastBpm ?? this.lastBpm,
       lastBeatsPerBar: lastBeatsPerBar ?? this.lastBeatsPerBar,
+      guitarTone: guitarTone ?? this.guitarTone,
     );
   }
 
@@ -73,7 +80,8 @@ class AppSettings {
       rememberLast == other.rememberLast &&
       lastTabIndex == other.lastTabIndex &&
       lastBpm == other.lastBpm &&
-      lastBeatsPerBar == other.lastBeatsPerBar;
+      lastBeatsPerBar == other.lastBeatsPerBar &&
+      guitarTone == other.guitarTone;
 
   @override
   int get hashCode => Object.hash(
@@ -84,5 +92,6 @@ class AppSettings {
         lastTabIndex,
         lastBpm,
         lastBeatsPerBar,
+        guitarTone,
       );
 }

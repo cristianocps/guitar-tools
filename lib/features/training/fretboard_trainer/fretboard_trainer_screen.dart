@@ -1,9 +1,10 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/guitar_synth.dart';
 import '../../../core/audio/providers.dart';
 import '../../../core/music_theory/pitch.dart';
+import '../../../core/settings/settings_providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/training/models/exercise_definition.dart';
 import '../../../core/training/providers/training_providers.dart';
@@ -16,9 +17,10 @@ final _fretboardControllerProvider = StateNotifierProvider.autoDispose.family
     final pitchStream = ref.watch(rawPitchStreamProvider);
     final validator = ref.watch(pitchChallengeValidatorProvider);
     final repository = ref.watch(trainingProgressRepositoryProvider);
-    // Tones are generated as in-memory WAV and played via BytesSource, which
-    // the low-latency (SoundPool) backend rejects — use the media player mode.
-    final player = AudioPlayer()..setPlayerMode(PlayerMode.mediaPlayer);
+    final player = InstrumentPlayer(
+      synth: ref.watch(guitarSynthProvider),
+      tone: ref.watch(guitarToneProvider),
+    );
     final controller = FretboardController(
       definition: definition,
       pitchStream: pitchStream,

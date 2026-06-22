@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/guitar_synth.dart';
 import '../../../core/audio/pitch_challenge_validator.dart';
 import '../../../core/audio/pitch_detector.dart';
-import '../../../core/audio/tone_cache.dart';
-import '../../../core/audio/tone_generator.dart';
 import '../../../core/music_theory/note.dart';
 import '../../../core/music_theory/pitch.dart';
 import '../../../core/training/models/exercise_definition.dart';
@@ -63,31 +60,31 @@ class EarTrainingController extends StateNotifier<EarTrainingSessionState> {
     required Stream<PitchEvent> pitchStream,
     required PitchChallengeValidator validator,
     required TrainingProgressRepository repository,
-    required AudioPlayer player,
+    required InstrumentPlayer player,
     required this.onFinished,
   })  : _pitchStream = pitchStream,
         _validator = validator,
         _repository = repository,
-        _player = player,
+        _instrument = player,
         super(EarTrainingSessionState(definition: definition)) {
     _startRound();
   }
 
   static const int _roundsPerSession = 10;
-  static const int _sampleRate = 44100;
 
   final Stream<PitchEvent> _pitchStream;
   final PitchChallengeValidator _validator;
   final TrainingProgressRepository _repository;
-  final AudioPlayer _player;
+  final InstrumentPlayer _instrument;
   final VoidCallback onFinished;
 
   StreamSubscription<PitchEvent>? _subscription;
+  bool _scoring = false;
 
   @override
   void dispose() {
     _subscription?.cancel();
-    _player.dispose();
+    _instrument.dispose();
     super.dispose();
   }
 
@@ -108,36 +105,43 @@ class EarTrainingController extends StateNotifier<EarTrainingSessionState> {
   }
 
   Future<void> _playTone(Note note, double duration) async {
-    final Uint8List wav = ToneGenerator.buildTone(
-      frequency: note.frequency,
-      sampleRate: _sampleRate,
-      duration: duration,
-    );
-    final String path = await writeTempWav(wav);
-    await _player.play(DeviceFileSource(path));
+    await _instrument.playMidi(note.midi, duration: duration);
   }
 
   Future<void> _playInterval(EarTrainingChallenge challenge) async {
-    await _playTone(challenge.root, 0.5);
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    await _playTone(challenge.target, 0.5);
+    await _playTone(challenge.root, 1.3);
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    await _playTone(challenge.target, 1.6);
   }
 
   void startListening() {
-    if (state.isListening) {
-      return;
+    _scoring = true;
+    if (!state.isListening) {
+      state = state.copyWith(isListening: true);
     }
-    state = state.copyWith(isListening: true);
-    _subscription = _pitchStream.listen(_onPitch);
+    // Subscribe once and keep the subscription for the whole session: the
+    // detector stream is a broadcast with `onCancel: stop`, so cancelling
+    // between rounds would tear down mic capture and the next round would never
+    // hear anything.
+    _subscription ??= _pitchStream.listen(_onPitch);
   }
 
   void stopListening() {
-    _subscription?.cancel();
-    _subscription = null;
-    state = state.copyWith(isListening: false);
+    _scoring = false;
+    if (state.isListening) {
+      state = state.copyWith(isListening: false);
+    }
   }
 
   void _onPitch(PitchEvent event) {
+    if (!_scoring) {
+      return;
+    }
+    // Ignore the mic while the device itself is playing the interval, so our
+    // own output is never taken as the user's answer.
+    if (_instrument.isOutputActive) {
+      return;
+    }
     if (!event.hasPitch || state.challenge == null) {
       return;
     }

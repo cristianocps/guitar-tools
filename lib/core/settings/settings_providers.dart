@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../audio/guitar_synth.dart';
 import '../music_theory/pitch.dart';
 import '../music_theory/tuning.dart';
 import 'settings.dart';
@@ -21,6 +22,7 @@ const String _kRememberLast = 'settings.rememberLast';
 const String _kLastTab = 'settings.lastTabIndex';
 const String _kLastBpm = 'settings.lastBpm';
 const String _kLastBeatsPerBar = 'settings.lastBeatsPerBar';
+const String _kGuitarTone = 'settings.guitarTone';
 
 Notation _readNotation(SharedPreferences prefs) {
   final String? raw = prefs.getString(_kNotation);
@@ -46,6 +48,18 @@ TuningPresetId _readTuningPreset(SharedPreferences prefs) {
   }
 }
 
+GuitarTone _readGuitarTone(SharedPreferences prefs) {
+  final String? raw = prefs.getString(_kGuitarTone);
+  if (raw == null) {
+    return GuitarTone.acoustic;
+  }
+  try {
+    return GuitarTone.values.byName(raw);
+  } on ArgumentError {
+    return GuitarTone.acoustic;
+  }
+}
+
 /// Persistent application settings backed by [sharedPreferencesProvider].
 final NotifierProvider<SettingsNotifier, AppSettings> settingsProvider =
     NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
@@ -67,6 +81,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lastBpm: prefs.getInt(_kLastBpm) ?? AppSettings.defaultBpm,
       lastBeatsPerBar:
           prefs.getInt(_kLastBeatsPerBar) ?? AppSettings.defaultBeatsPerBar,
+      guitarTone: _readGuitarTone(prefs),
     );
   }
 
@@ -105,6 +120,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(lastBeatsPerBar: value);
     unawaited(_prefs.setInt(_kLastBeatsPerBar, value));
   }
+
+  void setGuitarTone(GuitarTone value) {
+    state = state.copyWith(guitarTone: value);
+    unawaited(_prefs.setString(_kGuitarTone, value.name));
+  }
 }
 
 /// Configured A4 reference frequency in Hz.
@@ -123,6 +143,12 @@ final Provider<Notation> notationProvider =
 final Provider<TuningPresetId> defaultTuningPresetProvider =
     Provider<TuningPresetId>((Ref<TuningPresetId> ref) {
   return ref.watch(settingsProvider).defaultTuningPreset;
+});
+
+/// Configured guitar timbre used by the training exercises.
+final Provider<GuitarTone> guitarToneProvider =
+    Provider<GuitarTone>((Ref<GuitarTone> ref) {
+  return ref.watch(settingsProvider).guitarTone;
 });
 
 /// Tuning preset currently selected for the per-string tuner / fretboard.

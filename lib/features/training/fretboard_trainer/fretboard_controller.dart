@@ -1,14 +1,10 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/guitar_synth.dart';
 import '../../../core/audio/pitch_challenge_validator.dart';
 import '../../../core/audio/pitch_detector.dart';
-import '../../../core/audio/tone_cache.dart';
-import '../../../core/audio/tone_generator.dart';
-import '../../../core/music_theory/fretboard.dart';
 import '../../../core/music_theory/note.dart';
 import '../../../core/music_theory/pitch.dart';
 import '../../../core/training/models/exercise_definition.dart';
@@ -72,30 +68,29 @@ class FretboardController extends StateNotifier<FretboardSessionState> {
     required Stream<PitchEvent> pitchStream,
     required PitchChallengeValidator validator,
     required TrainingProgressRepository repository,
-    required AudioPlayer player,
+    required InstrumentPlayer player,
     required this.onFinished,
   })  : _pitchStream = pitchStream,
         _validator = validator,
         _repository = repository,
-        _player = player,
+        _instrument = player,
         super(FretboardSessionState(definition: definition)) {
     _init();
   }
 
-  static const int _sampleRate = 44100;
-
   final Stream<PitchEvent> _pitchStream;
   final PitchChallengeValidator _validator;
   final TrainingProgressRepository _repository;
-  final AudioPlayer _player;
+  final InstrumentPlayer _instrument;
   final VoidCallback onFinished;
 
   StreamSubscription<PitchEvent>? _subscription;
+  bool _scoring = false;
 
   @override
   void dispose() {
     _subscription?.cancel();
-    _player.dispose();
+    _instrument.dispose();
     super.dispose();
   }
 
@@ -127,20 +122,32 @@ class FretboardController extends StateNotifier<FretboardSessionState> {
   }
 
   void startListening() {
-    if (state.isListening) {
-      return;
+    _scoring = true;
+    if (!state.isListening) {
+      state = state.copyWith(isListening: true);
     }
-    state = state.copyWith(isListening: true);
-    _subscription = _pitchStream.listen(_onPitch);
+    // Subscribe once and keep it: the detector stream is a broadcast with
+    // `onCancel: stop`, so cancelling between challenges would stop mic capture
+    // and later challenges would never be detected.
+    _subscription ??= _pitchStream.listen(_onPitch);
   }
 
   void stopListening() {
-    _subscription?.cancel();
-    _subscription = null;
-    state = state.copyWith(isListening: false);
+    _scoring = false;
+    if (state.isListening) {
+      state = state.copyWith(isListening: false);
+    }
   }
 
   void _onPitch(PitchEvent event) {
+    if (!_scoring) {
+      return;
+    }
+    // Ignore the mic while "ouvir nota" is sounding, so the device's own
+    // playback isn't accepted as the user hitting the target note.
+    if (_instrument.isOutputActive) {
+      return;
+    }
     if (!event.hasPitch || state.challenge == null) {
       return;
     }
@@ -183,6 +190,9 @@ class FretboardController extends StateNotifier<FretboardSessionState> {
           challenge: state.scaleSequence[nextIndex],
           result: FretboardResult.correct,
         );
+        // Briefly pause scoring so the note that just rang doesn't immediately
+        // retrigger, then resume for the next note in the scale.
+        Future<void>.delayed(const Duration(milliseconds: 400), startListening);
       }
     } else {
       state = state.copyWith(
@@ -231,14 +241,7 @@ class FretboardController extends StateNotifier<FretboardSessionState> {
     if (challenge == null) {
       return;
     }
-    final Note note = noteAtFretPosition(challenge.stringIndex, challenge.fret);
-    final Uint8List wav = ToneGenerator.buildTone(
-      frequency: note.frequency,
-      sampleRate: _sampleRate,
-      duration: 0.6,
-    );
-    final String path = await writeTempWav(wav);
-    await _player.play(DeviceFileSource(path));
+    await _instrument.playMidi(challenge.expectedNote.midi, duration: 1.6);
   }
 }
 
