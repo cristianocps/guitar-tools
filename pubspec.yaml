@@ -71,6 +71,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/chords/guitar.json
     - assets/Guitar Acoustic (963KB).sf2
     - assets/Electric_guitar.SF2
     - assets/Power Guitar 1.sf2

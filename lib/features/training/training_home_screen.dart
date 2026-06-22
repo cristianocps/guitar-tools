@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/training/models/exercise_definition.dart';
 import '../../core/training/models/exercise_type.dart';
+import 'chords/chords_home_screen.dart';
 import 'ear_training/ear_training_generator.dart';
 import 'ear_training/ear_training_screen.dart';
 import 'exercise_list_screen.dart';
@@ -77,6 +78,17 @@ class TrainingHomeScreen extends StatelessWidget {
                 'Digitação',
                 TechniqueExerciseCatalog.buildDefinitions(),
                 (ExerciseDefinition d) => TechniqueExercisesScreen(definition: d),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ModuleCard(
+              icon: Icons.queue_music,
+              title: 'Acordes',
+              subtitle: 'Aprenda e pratique acordes',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) => const ChordsHomeScreen(),
+                ),
               ),
             ),
           ],
