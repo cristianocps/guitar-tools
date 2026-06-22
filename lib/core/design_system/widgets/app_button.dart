@@ -57,7 +57,7 @@ class _AppButtonState extends State<AppButton> {
         duration: AppMotion.fast,
         curve: AppMotion.standard,
         child: NeonGlow(
-          color: bg.withOpacity(enabled ? 0.5 : 0.15),
+          color: bg.withValues(alpha: enabled ? 0.5 : 0.15),
           child: AnimatedContainer(
             duration: AppMotion.fast,
             padding: const EdgeInsets.symmetric(
@@ -65,7 +65,7 @@ class _AppButtonState extends State<AppButton> {
               vertical: AppSpacing.m,
             ),
             decoration: BoxDecoration(
-              color: enabled ? bg : bg.withOpacity(0.4),
+              color: enabled ? bg : bg.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(AppSpacing.xxl),
             ),
             child: Row(

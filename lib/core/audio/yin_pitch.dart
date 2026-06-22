@@ -1,3 +1,4 @@
+import 'dart:math' show sqrt;
 import 'dart:typed_data';
 
 /// YIN fundamental-frequency estimator (de Cheveigné & Kawahara, 2002).
@@ -92,7 +93,10 @@ class YinPitchDetector {
   }
 }
 
-/// Root-mean-square amplitude of [samples].
+/// Root-mean-square amplitude of [samples] (0..1 for normalized input).
+///
+/// Returns the true RMS (with the square root) so the value is a linear
+/// amplitude that can be compared directly against a noise-gate threshold.
 double rms(Float64List samples) {
   if (samples.isEmpty) {
     return 0;
@@ -101,5 +105,5 @@ double rms(Float64List samples) {
   for (final double s in samples) {
     sum += s * s;
   }
-  return sum / samples.length;
+  return sqrt(sum / samples.length);
 }

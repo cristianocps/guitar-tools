@@ -17,7 +17,7 @@ class GlowingDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color c = active ? color : color.withOpacity(0.25);
+    final Color c = active ? color : color.withValues(alpha: 0.25);
     return Container(
       width: size,
       height: size,
@@ -26,7 +26,7 @@ class GlowingDot extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: c.withOpacity(0.6),
+            color: c.withValues(alpha: 0.6),
             blurRadius: size,
             spreadRadius: size * 0.25,
           ),

@@ -17,16 +17,34 @@ List<Offset> degreeOffsets(Offset center, double radius) {
   });
 }
 
-/// Draws the harmonic field as an interactive circle of 7 degrees, with the
-/// tonic highlighted and the selected degree emphasized.
+/// Brand color associated with a triad quality.
+Color colorForQuality(TriadQuality quality) {
+  switch (quality) {
+    case TriadQuality.major:
+    case TriadQuality.augmented:
+      return AppColors.primary;
+    case TriadQuality.minor:
+      return AppColors.secondary;
+    case TriadQuality.diminished:
+      return AppColors.tertiary;
+  }
+}
+
+/// Draws the harmonic field as an interactive circle of 7 degrees. Nodes are
+/// color-coded by chord quality, the tonic and the selected degree glow, and
+/// the [pulse] value (0..1) animates that glow for a living feel.
 class HarmonicCirclePainter extends CustomPainter {
   HarmonicCirclePainter({
     required this.field,
     required this.selectedIndex,
+    this.pulse = 0,
+    this.notation = Notation.letters,
   });
 
   final HarmonicField field;
   final int? selectedIndex;
+  final double pulse;
+  final Notation notation;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -34,37 +52,57 @@ class HarmonicCirclePainter extends CustomPainter {
     final double radius = min(size.width, size.height) / 2 - 48;
     final List<Offset> nodes = degreeOffsets(center, radius);
 
-    // Connecting ring.
+    // Connecting ring with a subtle gradient.
     final Paint ring = Paint()
-      ..color = AppColors.border
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = 2
+      ..shader = SweepGradient(
+        colors: <Color>[
+          AppColors.primary.withValues(alpha: 0.5),
+          AppColors.secondary.withValues(alpha: 0.5),
+          AppColors.tertiary.withValues(alpha: 0.5),
+          AppColors.primary.withValues(alpha: 0.5),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius, ring);
 
     // Spokes from center to each degree.
     final Paint spoke = Paint()
-      ..color = AppColors.border.withOpacity(0.5)
+      ..color = AppColors.border.withValues(alpha: 0.4)
       ..strokeWidth = 1.5;
     for (final Offset node in nodes) {
       canvas.drawLine(center, node, spoke);
     }
 
-    // Center tonic label.
-    final String tonicName = PitchNames.name(field.tonicPitchClass);
+    // Center tonic plate.
+    final Color tonicColor = colorForQuality(field.degrees[0].chord.quality);
+    canvas.drawCircle(
+      center,
+      40,
+      Paint()..color = AppColors.surface.withValues(alpha: 0.85),
+    );
+    canvas.drawCircle(
+      center,
+      40,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = tonicColor.withValues(alpha: 0.7),
+    );
     _drawText(
       canvas,
-      tonicName,
-      center,
+      PitchNames.name(field.tonicPitchClass, notation: notation),
+      center + const Offset(0, -6),
       style: const TextStyle(
         color: AppColors.textPrimary,
-        fontSize: 26,
+        fontSize: 24,
         fontWeight: FontWeight.w800,
       ),
     );
     _drawText(
       canvas,
       field.scaleType == ScaleType.major ? 'Maior' : 'Menor',
-      center + const Offset(0, 26),
+      center + const Offset(0, 18),
       style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
     );
 
@@ -73,33 +111,43 @@ class HarmonicCirclePainter extends CustomPainter {
       final HarmonicDegree degree = field.degrees[i];
       final bool isTonic = i == 0;
       final bool isSelected = i == selectedIndex;
+      final Color color = colorForQuality(degree.chord.quality);
+      final double r = isTonic ? 32 : 26;
 
-      final Color color = isTonic
-          ? AppColors.primary
-          : (isSelected ? AppColors.accent : AppColors.surfaceElevated);
-
+      // Glow (tonic always; selected pulses).
       if (isTonic || isSelected) {
+        final double glowAlpha = isSelected ? 0.35 + 0.35 * pulse : 0.4;
         final Paint glow = Paint()
-          ..color = color.withOpacity(0.5)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 16);
-        canvas.drawCircle(node, 34, glow);
+          ..color = color.withValues(alpha: glowAlpha)
+          ..maskFilter = MaskFilter.blur(BlurStyle.outer, isSelected ? 18 : 14);
+        canvas.drawCircle(node, r + (isSelected ? 4 * pulse : 0), glow);
       }
 
-      final Paint nodePaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(node, isTonic ? 34 : 28, nodePaint);
+      // Node fill — radial gradient for depth.
+      final Paint fill = Paint()
+        ..shader = RadialGradient(
+          colors: <Color>[
+            Color.lerp(color, Colors.white, 0.25)!,
+            color,
+            Color.lerp(color, Colors.black, 0.35)!,
+          ],
+          stops: const <double>[0.0, 0.55, 1.0],
+        ).createShader(Rect.fromCircle(center: node, radius: r));
+      canvas.drawCircle(node, r, fill);
 
+      // Outer ring — brighter when selected.
       final Paint border = Paint()
-        ..color = AppColors.border
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      canvas.drawCircle(node, isTonic ? 34 : 28, border);
+        ..strokeWidth = isSelected ? 3 : 2
+        ..color = isSelected
+            ? Colors.white.withValues(alpha: 0.9)
+            : color.withValues(alpha: 0.4);
+      canvas.drawCircle(node, r, border);
 
       // Chord name inside the node.
       _drawText(
         canvas,
-        degree.chord.name(),
+        degree.chord.name(notation: notation),
         node,
         style: TextStyle(
           color: AppColors.background,
@@ -111,9 +159,9 @@ class HarmonicCirclePainter extends CustomPainter {
       _drawText(
         canvas,
         degree.romanNumeral,
-        node + Offset(0, isTonic ? 50 : 44),
+        node + Offset(0, r + 14),
         style: TextStyle(
-          color: isTonic ? AppColors.primary : AppColors.textSecondary,
+          color: isSelected ? Colors.white : color,
           fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
@@ -140,5 +188,7 @@ class HarmonicCirclePainter extends CustomPainter {
   bool shouldRepaint(covariant HarmonicCirclePainter oldDelegate) =>
       oldDelegate.field.tonicPitchClass != field.tonicPitchClass ||
       oldDelegate.field.scaleType != field.scaleType ||
-      oldDelegate.selectedIndex != selectedIndex;
+      oldDelegate.selectedIndex != selectedIndex ||
+      oldDelegate.notation != notation ||
+      oldDelegate.pulse != pulse;
 }

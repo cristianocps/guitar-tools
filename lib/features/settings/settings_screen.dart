@@ -81,7 +81,7 @@ class SettingsScreen extends ConsumerWidget {
                     style: AppTypography.body,
                   ),
                   value: settings.rememberLast,
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   onChanged: (bool v) =>
                       ref.read(settingsProvider.notifier).setRememberLast(v),
                 ),

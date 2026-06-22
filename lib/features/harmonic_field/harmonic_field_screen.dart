@@ -24,32 +24,71 @@ class HarmonicFieldScreen extends ConsumerStatefulWidget {
       _HarmonicFieldScreenState();
 }
 
-class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
+class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen>
+    with SingleTickerProviderStateMixin {
   int _tonic = 0; // C
   ScaleType _mode = ScaleType.major;
   int? _selectedDegree;
+  bool _listening = false;
+
+  // Hysteresis for the auto-tonic: only commit after the same pitch class is
+  // detected on several consecutive frames, so the circle doesn't flicker.
+  int? _candidateTonic;
+  int _candidateCount = 0;
+  static const int _stabilityFrames = 4;
+
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  void _onPitch(PitchEvent e) {
+    final bool active = e.hasPitch && e.confidence >= 0.85;
+    if (active != _listening) {
+      setState(() => _listening = active);
+    }
+    if (!active) {
+      _candidateTonic = null;
+      _candidateCount = 0;
+      return;
+    }
+    final TuningReading? reading = noteFromFrequency(
+      e.frequency,
+      a4Reference: ref.read(a4ReferenceProvider),
+    );
+    if (reading == null) {
+      return;
+    }
+    final int pc = reading.nearest.pitchClass;
+    if (pc == _candidateTonic) {
+      _candidateCount++;
+    } else {
+      _candidateTonic = pc;
+      _candidateCount = 1;
+    }
+    if (_candidateCount >= _stabilityFrames && pc != _tonic) {
+      setState(() => _tonic = pc);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Real-time tonic from the detected note (with light hysteresis).
     ref.listen<AsyncValue<PitchEvent>>(pitchStreamProvider,
         (_, AsyncValue<PitchEvent> next) {
       next.maybeWhen<void>(
-        data: (PitchEvent e) {
-          if (!e.hasPitch || e.confidence < 0.85) {
-            return;
-          }
-          final TuningReading? reading = noteFromFrequency(
-            e.frequency,
-            a4Reference: ref.read(a4ReferenceProvider),
-          );
-          if (reading == null) {
-            return;
-          }
-          if (reading.nearest.pitchClass != _tonic) {
-            setState(() => _tonic = reading.nearest.pitchClass);
-          }
-        },
+        data: _onPitch,
         orElse: () {},
       );
     });
@@ -67,6 +106,8 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
           children: <Widget>[
             const SizedBox(height: AppSpacing.s),
             const ToolHeader(title: 'Campo Harmônico'),
+            const SizedBox(height: AppSpacing.s),
+            _ListeningPill(listening: _listening),
             const SizedBox(height: AppSpacing.s),
             AppSegmented<ScaleType>(
               segments: const <ButtonSegment<ScaleType>>[
@@ -101,11 +142,18 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
                     child: SizedBox(
                       width: size.width,
                       height: size.height,
-                      child: CustomPaint(
-                        painter: HarmonicCirclePainter(
-                          field: field,
-                          selectedIndex: _selectedDegree,
-                        ),
+                      child: AnimatedBuilder(
+                        animation: _pulse,
+                        builder: (BuildContext context, _) {
+                          return CustomPaint(
+                            painter: HarmonicCirclePainter(
+                              field: field,
+                              selectedIndex: _selectedDegree,
+                              pulse: _pulse.value,
+                              notation: notation,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   );
@@ -150,6 +198,40 @@ class _HarmonicFieldScreenState extends ConsumerState<HarmonicFieldScreen> {
   }
 }
 
+class _ListeningPill extends StatelessWidget {
+  const _ListeningPill({required this.listening});
+
+  final bool listening;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = listening ? AppColors.inTune : AppColors.textMuted;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.m,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          GlowingDot(color: color, size: 9, active: listening),
+          const SizedBox(width: AppSpacing.s),
+          Text(
+            listening ? 'Ouvindo o instrumento' : 'Toque uma nota para girar',
+            style: AppTypography.label.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DegreeDetails extends StatelessWidget {
   const _DegreeDetails({
     required this.field,
@@ -174,6 +256,7 @@ class _DegreeDetails extends StatelessWidget {
       );
     }
     final HarmonicDegree degree = field.degrees[selectedIndex!];
+    final Color color = colorForQuality(degree.chord.quality);
     final String notes = degree.chord.pitchClasses
         .map((int pc) => PitchNames.name(pc, notation: notation))
         .join('  ');
@@ -182,13 +265,15 @@ class _DegreeDetails extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
+          GlowingDot(color: color, size: 10),
+          const SizedBox(width: AppSpacing.s),
           Text(
             '${degree.romanNumeral}  ·  ',
-            style: AppTypography.title.copyWith(color: AppColors.primary),
+            style: AppTypography.title.copyWith(color: color),
           ),
           Text(
             degree.chord.name(notation: notation),
-            style: AppTypography.headline,
+            style: AppTypography.headline.copyWith(color: color),
           ),
           const SizedBox(width: AppSpacing.m),
           Text(notes, style: AppTypography.body),

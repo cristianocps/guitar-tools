@@ -1,4 +1,5 @@
-import 'dart:math' show ln2, log;
+import 'dart:async';
+import 'dart:math' show ln2, log, pi;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +18,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import 'string_visualizer_painter.dart';
-import 'tuning_meter_painter.dart';
+import 'tuner_gauge_painter.dart';
 
 enum TunerMode { chromatic, string }
 
@@ -50,17 +51,66 @@ class TunerScreen extends ConsumerStatefulWidget {
   ConsumerState<TunerScreen> createState() => _TunerScreenState();
 }
 
-class _TunerScreenState extends ConsumerState<TunerScreen> {
+class _TunerScreenState extends ConsumerState<TunerScreen>
+    with TickerProviderStateMixin {
   TunerMode _mode = TunerMode.chromatic;
   int _selectedString = 0;
   PitchEvent? _lastEvent;
   final ValueNotifier<TunerView> _view =
       ValueNotifier<TunerView>(TunerView.empty);
+  late final AnimationController _pulse;
+
+  // Continuous clock that drives the string vibration. Its period is the
+  // visual oscillation of the fundamental; higher strings get a shorter period
+  // so they shimmer faster, mirroring real pitch.
+  late final AnimationController _stringClock;
+  Duration _clockPeriod = const Duration(milliseconds: 150);
+
+  // Keep the last detected note on screen for a moment after the sound fades,
+  // so the player has time to read the note and how far off it is.
+  Timer? _holdTimer;
+  static const Duration _holdDuration = Duration(milliseconds: 1800);
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _stringClock = AnimationController(vsync: this, duration: _clockPeriod)
+      ..repeat();
+  }
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
+    _pulse.dispose();
+    _stringClock.dispose();
     _view.dispose();
     super.dispose();
+  }
+
+  /// Sets the string-vibration speed from the active string's position: higher
+  /// strings vibrate faster. Only re-arms the clock when the speed changes, so
+  /// a sustained note keeps a smooth, continuous oscillation.
+  void _syncStringClock(int? index) {
+    if (index == null) {
+      return;
+    }
+    final int n = ref.read(selectedTuningProvider).tuning.strings.length;
+    final double rel = n > 1 ? index / (n - 1) : 0.5;
+    final Duration period =
+        Duration(milliseconds: (170 - 80 * rel).round());
+    if (period != _clockPeriod) {
+      _clockPeriod = period;
+      _stringClock.repeat(period: period);
+    }
+  }
+
+  void _publish(TunerView view) {
+    _view.value = view;
+    _syncStringClock(view.activeStringIndex);
   }
 
   TunerView _compute(PitchEvent? event) {
@@ -85,7 +135,7 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
         octave: '${reading.nearest.octave}',
         cents: reading.cents,
         state: reading.state,
-        activeStringIndex: _matchString(strings, reading.nearest.pitchClass),
+        activeStringIndex: _matchString(strings, reading.nearest.midi),
         intensity: intensity,
         hasPitch: true,
       );
@@ -109,31 +159,53 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
     );
   }
 
-  int? _matchString(List<GuitarString> strings, int pitchClass) {
+  /// Highlights the string nearest to the detected note by absolute pitch
+  /// (MIDI), so the high and low E are told apart instead of both matching by
+  /// pitch class. Returns null when the note is far from every string.
+  int? _matchString(List<GuitarString> strings, int detectedMidi) {
+    int? best;
+    int bestDistance = 1 << 30;
     for (int i = 0; i < strings.length; i++) {
-      if (strings[i].note.pitchClass == pitchClass) {
-        return i;
+      final int distance = (strings[i].note.midi - detectedMidi).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
       }
     }
-    return null;
+    // Only light a string when the note is within ~2 semitones of it.
+    return bestDistance <= 2 ? best : null;
   }
 
   void _onEvent(AsyncValue<PitchEvent> next) {
-    _lastEvent = next.maybeWhen<PitchEvent?>(
-      data: (PitchEvent e) => e,
-      orElse: () => _lastEvent,
+    next.maybeWhen<void>(
+      data: (PitchEvent e) {
+        // Ignore "no pitch" frames: the hold timer keeps the last reading
+        // visible so it doesn't flash away the instant the string is muted.
+        if (!e.hasPitch) {
+          return;
+        }
+        _lastEvent = e;
+        _publish(_compute(e));
+        _holdTimer?.cancel();
+        _holdTimer = Timer(_holdDuration, _clearReading);
+      },
+      orElse: () {},
     );
-    _view.value = _compute(_lastEvent);
+  }
+
+  void _clearReading() {
+    _lastEvent = null;
+    _view.value = TunerView.empty;
   }
 
   void _selectMode(TunerMode mode) {
     setState(() => _mode = mode);
-    _view.value = _compute(_lastEvent);
+    _publish(_compute(_lastEvent));
   }
 
   void _selectString(int index) {
     setState(() => _selectedString = index);
-    _view.value = _compute(_lastEvent);
+    _publish(_compute(_lastEvent));
   }
 
   @override
@@ -214,20 +286,8 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
               selectedIndex: _selectedString,
               onSelect: _selectString,
             ),
-            const SizedBox(height: AppSpacing.l),
-            _NoteDisplay(view: v),
-            const SizedBox(height: AppSpacing.l),
-            SizedBox(
-              height: 64,
-              child: CustomPaint(
-                painter: TuningMeterPainter(
-                  cents: v.cents,
-                  active: v.hasPitch,
-                  inTune: v.state == TuningState.inTune,
-                ),
-                child: const SizedBox.expand(),
-              ),
-            ),
+            const SizedBox(height: AppSpacing.m),
+            _TunerGauge(view: v, pulse: _pulse),
             const SizedBox(height: AppSpacing.s),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -248,14 +308,25 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.l),
+            const SizedBox(height: AppSpacing.m),
             Expanded(
-              child: CustomPaint(
-                painter: StringVisualizerPainter(
-                  activeIndex: v.activeStringIndex,
-                  intensity: v.intensity,
-                ),
-                child: const SizedBox.expand(),
+              child: AnimatedBuilder(
+                animation: _stringClock,
+                builder: (BuildContext context, _) {
+                  return CustomPaint(
+                    painter: StringVisualizerPainter(
+                      activeIndex: v.activeStringIndex,
+                      intensity: v.intensity,
+                      phase: _stringClock.value * 2 * pi,
+                      stringCount: ref
+                          .read(selectedTuningProvider)
+                          .tuning
+                          .strings
+                          .length,
+                    ),
+                    child: const SizedBox.expand(),
+                  );
+                },
               ),
             ),
           ],
@@ -333,13 +404,17 @@ class _StringPicker extends StatelessWidget {
   }
 }
 
-class _NoteDisplay extends StatelessWidget {
-  const _NoteDisplay({required this.view});
+/// The headline tuner gauge: an animated arc + needle with the detected note
+/// read-out floating in the center.
+class _TunerGauge extends StatelessWidget {
+  const _TunerGauge({required this.view, required this.pulse});
 
   final TunerView view;
+  final Animation<double> pulse;
 
   @override
   Widget build(BuildContext context) {
+    final bool inTune = view.hasPitch && view.state == TuningState.inTune;
     final Color color = !view.hasPitch
         ? AppColors.textSecondary
         : switch (view.state) {
@@ -348,38 +423,87 @@ class _NoteDisplay extends StatelessWidget {
             TuningState.sharp => AppColors.sharp,
           };
 
-    final String centsLabel =
-        view.hasPitch ? '${view.cents > 0 ? '+' : ''}${view.cents.round()}' : '';
+    final String centsLabel = view.hasPitch
+        ? '${view.cents > 0 ? '+' : ''}${view.cents.round()} cents'
+        : 'Toque uma nota';
 
     return Semantics(
       container: true,
       liveRegion: true,
       label: view.hasPitch
-          ? 'Nota ${view.noteName} ${view.octave}, $centsLabel cents'
+          ? 'Nota ${view.noteName} ${view.octave}, $centsLabel'
           : 'Nenhuma nota detectada',
-      child: GlassCard(
-        child: Column(
+      child: SizedBox(
+        height: 244,
+        child: Stack(
+          alignment: Alignment.center,
           children: <Widget>[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              textBaseline: TextBaseline.alphabetic,
-              children: <Widget>[
-                Text(
-                  view.noteName,
-                  style: AppTypography.display.copyWith(color: color),
+            Positioned.fill(
+              child: ClipRect(
+                child: AnimatedBuilder(
+                  animation: pulse,
+                  builder: (BuildContext context, _) {
+                    return TweenAnimationBuilder<double>(
+                      tween: Tween<double>(
+                        begin: view.cents,
+                        end: view.cents,
+                      ),
+                      duration: const Duration(milliseconds: 140),
+                      curve: Curves.easeOut,
+                      builder: (BuildContext context, double cents, _) {
+                        return CustomPaint(
+                          painter: TunerGaugePainter(
+                            cents: cents,
+                            active: view.hasPitch,
+                            inTune: inTune,
+                            glow: inTune ? pulse.value : 0,
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
-                if (view.octave.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      view.octave,
-                      style: AppTypography.headline.copyWith(color: color),
+              ),
+            ),
+            Align(
+              alignment: const Alignment(0, -0.34),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        view.noteName,
+                        style: AppTypography.display.copyWith(
+                          color: color,
+                          shadows: <Shadow>[
+                            Shadow(color: color.withValues(alpha: 0.6), blurRadius: 24),
+                          ],
+                        ),
+                      ),
+                      if (view.octave.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 14, left: 2),
+                          child: Text(
+                            view.octave,
+                            style: AppTypography.title.copyWith(color: color),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    centsLabel,
+                    style: AppTypography.label.copyWith(
+                      color: view.hasPitch ? color : AppColors.textMuted,
+                      letterSpacing: 1,
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-            Text(centsLabel, style: AppTypography.title.copyWith(color: color)),
           ],
         ),
       ),

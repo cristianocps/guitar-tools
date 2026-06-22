@@ -25,8 +25,13 @@ class PitchEvent {
 class PitchDetector {
   PitchDetector({
     required this.capture,
-    this.windowSize = 2048,
-    this.noiseGate = 0.004,
+    // A larger window fits several periods of the lowest guitar string (E2,
+    // ~82 Hz) so YIN locks onto its true fundamental instead of an octave/
+    // harmonic — or missing it entirely.
+    this.windowSize = 4096,
+    // True-RMS amplitude gate (~-40 dBFS): low enough to catch a softly played
+    // string a short distance from the mic, high enough to reject room noise.
+    this.noiseGate = 0.01,
     this.smoothingFrames = 5,
     this.holdFrames = 3,
     YinPitchDetector? yin,
