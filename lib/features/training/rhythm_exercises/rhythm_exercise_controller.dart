@@ -71,7 +71,9 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
         _rhythmDetector = rhythmDetector,
         _capture = capture,
         _repository = repository,
-        super(RhythmSessionState(definition: definition));
+        super(RhythmSessionState(definition: definition)) {
+    unawaited(start());
+  }
 
   static const int _toleranceMs = 100;
 

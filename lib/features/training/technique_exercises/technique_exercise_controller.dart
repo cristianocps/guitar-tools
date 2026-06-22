@@ -118,8 +118,10 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
   }
 
   void _initEngine() {
-    final int bpm = (state.definition.parameters['bpm'] as int?)?.clamp(20, 200) ?? 80;
+    final int bpm =
+        (state.definition.parameters['bpm'] as int?)?.clamp(20, 200) ?? 80;
     _engine.setBpm(bpm);
+    start();
   }
 
   void start() {

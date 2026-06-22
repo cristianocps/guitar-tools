@@ -98,7 +98,12 @@ class EarTrainingController extends StateNotifier<EarTrainingSessionState> {
       result: EarTrainingResult.idle,
       detectedNote: null,
     );
-    unawaited(_playInterval(challenge));
+    unawaited(_playIntervalAndListen(challenge));
+  }
+
+  Future<void> _playIntervalAndListen(EarTrainingChallenge challenge) async {
+    await _playInterval(challenge);
+    startListening();
   }
 
   Future<void> _playTone(Note note, double duration) async {

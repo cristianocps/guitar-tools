@@ -108,6 +108,7 @@ class FretboardController extends StateNotifier<FretboardSessionState> {
         scaleSequence: sequence,
         challenge: sequence.first,
       );
+      startListening();
     } else {
       _nextLocateChallenge();
     }
@@ -121,6 +122,7 @@ class FretboardController extends StateNotifier<FretboardSessionState> {
       result: FretboardResult.idle,
       detectedNote: null,
     );
+    startListening();
   }
 
   void startListening() {
