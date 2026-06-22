@@ -58,17 +58,17 @@ class HarmonicCirclePainter extends CustomPainter {
       ..strokeWidth = 2
       ..shader = SweepGradient(
         colors: <Color>[
-          AppColors.primary.withValues(alpha: 0.5),
-          AppColors.secondary.withValues(alpha: 0.5),
-          AppColors.tertiary.withValues(alpha: 0.5),
-          AppColors.primary.withValues(alpha: 0.5),
+          AppColors.primary.withOpacity(0.5),
+          AppColors.secondary.withOpacity(0.5),
+          AppColors.tertiary.withOpacity(0.5),
+          AppColors.primary.withOpacity(0.5),
         ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius, ring);
 
     // Spokes from center to each degree.
     final Paint spoke = Paint()
-      ..color = AppColors.border.withValues(alpha: 0.4)
+      ..color = AppColors.border.withOpacity(0.4)
       ..strokeWidth = 1.5;
     for (final Offset node in nodes) {
       canvas.drawLine(center, node, spoke);
@@ -79,7 +79,7 @@ class HarmonicCirclePainter extends CustomPainter {
     canvas.drawCircle(
       center,
       40,
-      Paint()..color = AppColors.surface.withValues(alpha: 0.85),
+      Paint()..color = AppColors.surface.withOpacity(0.85),
     );
     canvas.drawCircle(
       center,
@@ -87,7 +87,7 @@ class HarmonicCirclePainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = tonicColor.withValues(alpha: 0.7),
+        ..color = tonicColor.withOpacity(0.7),
     );
     _drawText(
       canvas,
@@ -118,7 +118,7 @@ class HarmonicCirclePainter extends CustomPainter {
       if (isTonic || isSelected) {
         final double glowAlpha = isSelected ? 0.35 + 0.35 * pulse : 0.4;
         final Paint glow = Paint()
-          ..color = color.withValues(alpha: glowAlpha)
+          ..color = color.withOpacity(glowAlpha)
           ..maskFilter = MaskFilter.blur(BlurStyle.outer, isSelected ? 18 : 14);
         canvas.drawCircle(node, r + (isSelected ? 4 * pulse : 0), glow);
       }
@@ -140,8 +140,8 @@ class HarmonicCirclePainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = isSelected ? 3 : 2
         ..color = isSelected
-            ? Colors.white.withValues(alpha: 0.9)
-            : color.withValues(alpha: 0.4);
+            ? Colors.white.withOpacity(0.9)
+            : color.withOpacity(0.4);
       canvas.drawCircle(node, r, border);
 
       // Chord name inside the node.

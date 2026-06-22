@@ -479,7 +479,7 @@ class _TunerGauge extends StatelessWidget {
                         style: AppTypography.display.copyWith(
                           color: color,
                           shadows: <Shadow>[
-                            Shadow(color: color.withValues(alpha: 0.6), blurRadius: 24),
+                            Shadow(color: color.withOpacity(0.6), blurRadius: 24),
                           ],
                         ),
                       ),

@@ -4,11 +4,13 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../app/app_providers.dart';
 import 'audio_capture_service.dart';
 import 'permission_provider.dart';
+import 'pitch_challenge_validator.dart';
 import 'pitch_detector.dart';
+import 'rhythm_detector.dart';
 
 /// The audio capture service (backed by `record`). Overrideable in tests.
-final audioCaptureServiceProvider = Provider<AudioCaptureService>((ref) {
-  final service = RecordAudioCaptureService();
+final audioCaptureServiceProvider = Provider<AudioCaptureService>((Ref ref) {
+  final AudioCaptureService service = RecordAudioCaptureService();
   ref.onDispose(service.dispose);
   return service;
 });
@@ -17,32 +19,55 @@ final audioCaptureServiceProvider = Provider<AudioCaptureService>((ref) {
 ///
 /// Because a detector instance is stateful, this provider creates one on read;
 /// call [PitchDetector.stop] when no longer listening.
-final pitchDetectorProvider = Provider<PitchDetector>((ref) {
+final pitchDetectorProvider = Provider<PitchDetector>((Ref ref) {
   final AudioCaptureService capture = ref.watch(audioCaptureServiceProvider);
   return PitchDetector(capture: capture);
 });
 
+/// Raw pitch stream for consumers that need a [Stream] subscription.
+final rawPitchStreamProvider = Provider.autoDispose<Stream<PitchEvent>>(
+  (Ref ref) {
+    final AudioCaptureService capture = ref.watch(audioCaptureServiceProvider);
+    final PitchDetector detector = PitchDetector(capture: capture);
+    ref.onDispose(detector.stop);
+    return detector.start();
+  },
+);
+
 /// Live pitch stream that automatically starts capture only when a mic-using
-/// feature (tuner / harmonic field) is active, the app is in the foreground
-/// and microphone permission has been granted. Rebuilds (start/stop) when any
-/// of those conditions change — this is the single owner of the microphone,
-/// satisfying the lifecycle requirement.
-final pitchStreamProvider =
-    StreamProvider.autoDispose<PitchEvent>((ref) {
+/// feature (tuner / harmonic field / training) is active, the app is in the
+/// foreground and microphone permission has been granted. Rebuilds (start/stop)
+/// when any of those conditions change — this is the single owner of the
+/// microphone, satisfying the lifecycle requirement.
+final pitchStreamProvider = StreamProvider.autoDispose<PitchEvent>((Ref ref) {
   final AppTab tab = ref.watch(activeTabProvider);
   final bool resumed = ref.watch(appResumedProvider);
   final PermissionStatus permission = ref.watch(micPermissionProvider);
 
-  final bool micActive = (tab == AppTab.tuner || tab == AppTab.harmonicField) &&
-      resumed &&
-      permission == PermissionStatus.granted;
+  final bool micActive =
+      (tab == AppTab.tuner ||
+              tab == AppTab.harmonicField ||
+              tab == AppTab.training) &&
+          resumed &&
+          permission == PermissionStatus.granted;
 
   if (!micActive) {
     return const Stream<PitchEvent>.empty();
   }
 
+  return ref.watch(rawPitchStreamProvider);
+});
+
+/// Shared [PitchChallengeValidator] instance.
+final pitchChallengeValidatorProvider = Provider<PitchChallengeValidator>(
+  (Ref ref) => const PitchChallengeValidator(),
+);
+
+/// Factory provider for [RhythmDetector] instances.
+final rhythmDetectorProvider = Provider.autoDispose<RhythmDetector>((Ref ref) {
   final AudioCaptureService capture = ref.watch(audioCaptureServiceProvider);
-  final PitchDetector detector = PitchDetector(capture: capture);
-  ref.onDispose(detector.stop);
-  return detector.start();
+  final RhythmDetector detector =
+      RhythmDetector(sampleRate: capture.sampleRate);
+  ref.onDispose(detector.dispose);
+  return detector;
 });

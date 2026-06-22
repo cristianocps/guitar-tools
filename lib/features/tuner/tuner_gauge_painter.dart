@@ -58,7 +58,7 @@ class TunerGaugePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 14
       ..strokeCap = StrokeCap.round
-      ..color = AppColors.border.withValues(alpha: 0.6);
+      ..color = AppColors.border.withOpacity(0.6);
     canvas.drawArc(arcRect, startAngle, sweep, false, track);
 
     // Graded color track (flat → in-tune → sharp) drawn as a sweep gradient.
@@ -70,11 +70,11 @@ class TunerGaugePainter extends CustomPainter {
         startAngle: startAngle,
         endAngle: startAngle + sweep,
         colors: <Color>[
-          AppColors.flat.withValues(alpha: 0.85),
-          AppColors.flat.withValues(alpha: 0.35),
+          AppColors.flat.withOpacity(0.85),
+          AppColors.flat.withOpacity(0.35),
           AppColors.inTune,
-          AppColors.sharp.withValues(alpha: 0.35),
-          AppColors.sharp.withValues(alpha: 0.85),
+          AppColors.sharp.withOpacity(0.35),
+          AppColors.sharp.withOpacity(0.85),
         ],
         stops: const <double>[0.0, 0.36, 0.5, 0.64, 1.0],
         transform: const GradientRotation(startAngle),
@@ -89,8 +89,8 @@ class TunerGaugePainter extends CustomPainter {
       final double outer = radius - 2;
       final Paint tick = Paint()
         ..color = major
-            ? AppColors.inTune.withValues(alpha: 0.9)
-            : AppColors.textMuted.withValues(alpha: 0.7)
+            ? AppColors.inTune.withOpacity(0.9)
+            : AppColors.textMuted.withOpacity(0.7)
         ..strokeWidth = major ? 3 : 1.5
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(
@@ -125,7 +125,7 @@ class TunerGaugePainter extends CustomPainter {
     final Offset tip = center + dir * (radius - 4);
     final Offset base = center + dir * 26;
     final Paint needleGlow = Paint()
-      ..color = color.withValues(alpha: 0.5 + 0.4 * glow)
+      ..color = color.withOpacity(0.5 + 0.4 * glow)
       ..strokeWidth = 8
       ..strokeCap = StrokeCap.round
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
@@ -159,7 +159,7 @@ class TunerGaugePainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = color.withValues(alpha: 0.8),
+        ..color = color.withOpacity(0.8),
     );
   }
 

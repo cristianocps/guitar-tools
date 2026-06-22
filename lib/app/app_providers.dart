@@ -4,7 +4,7 @@ import '../core/settings/settings.dart';
 import '../core/settings/settings_providers.dart';
 
 /// The app destinations.
-enum AppTab { metronome, harmonicField, tuner }
+enum AppTab { metronome, harmonicField, tuner, training }
 
 /// Active bottom-nav tab. Restores the last tab from settings when
 /// "remember last" is enabled, and persists selection on change.

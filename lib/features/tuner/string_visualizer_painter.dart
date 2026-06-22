@@ -84,7 +84,7 @@ class StringVisualizerPainter extends CustomPainter {
       }
 
       final Paint glow = Paint()
-        ..color = AppColors.primary.withValues(alpha: 0.5)
+        ..color = AppColors.primary.withOpacity(0.5)
         ..style = PaintingStyle.stroke
         ..strokeWidth = thickness + 4
         ..strokeCap = StrokeCap.round

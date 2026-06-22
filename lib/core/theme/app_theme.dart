@@ -39,10 +39,10 @@ class AppTheme {
         backgroundColor: AppColors.surface,
         indicatorColor: AppColors.primary,
         surfaceTintColor: Colors.transparent,
-        labelTextStyle: WidgetStatePropertyAll<TextStyle>(
+        labelTextStyle: MaterialStatePropertyAll<TextStyle>(
           AppTypography.label.copyWith(color: AppColors.textSecondary),
         ),
-        iconTheme: const WidgetStatePropertyAll<IconThemeData>(
+        iconTheme: const MaterialStatePropertyAll<IconThemeData>(
           IconThemeData(color: AppColors.textSecondary),
         ),
       ),

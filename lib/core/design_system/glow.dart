@@ -87,7 +87,7 @@ class NeonGlow extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: color.withValues(alpha: 0.35),
+            color: color.withOpacity(0.35),
             blurRadius: 28,
             spreadRadius: 2,
           ),

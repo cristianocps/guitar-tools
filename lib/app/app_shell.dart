@@ -9,10 +9,11 @@ import '../core/theme/app_glass.dart';
 import '../features/harmonic_field/harmonic_field_screen.dart';
 import '../features/metronome/metronome_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/training/training_home_screen.dart';
 import '../features/tuner/tuner_screen.dart';
 import 'app_providers.dart';
 
-/// Root shell with bottom navigation between the three utilities.
+/// Root shell with bottom navigation between the utilities.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -68,6 +69,7 @@ class _AppShellState extends ConsumerState<AppShell>
           MetronomeScreen(),
           HarmonicFieldScreen(),
           TunerScreen(),
+          TrainingHomeScreen(),
         ],
       ),
       bottomNavigationBar: ClipRect(
@@ -98,6 +100,11 @@ class _AppShellState extends ConsumerState<AppShell>
                 icon: Icon(Icons.tune_outlined),
                 selectedIcon: Icon(Icons.tune),
                 label: 'Afinador',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.school_outlined),
+                selectedIcon: Icon(Icons.school),
+                label: 'Treino',
               ),
             ],
           ),

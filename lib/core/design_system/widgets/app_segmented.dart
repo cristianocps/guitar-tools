@@ -21,20 +21,20 @@ class AppSegmented<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     return SegmentedButton<T>(
       style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith<Color?>(
-          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+        backgroundColor: MaterialStateProperty.resolveWith<Color?>(
+          (Set<MaterialState> states) => states.contains(MaterialState.selected)
               ? AppColors.primary
               : AppColors.glassSurface,
         ),
-        foregroundColor: WidgetStateProperty.resolveWith<Color?>(
-          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+        foregroundColor: MaterialStateProperty.resolveWith<Color?>(
+          (Set<MaterialState> states) => states.contains(MaterialState.selected)
               ? AppColors.background
               : AppColors.textSecondary,
         ),
-        side: const WidgetStatePropertyAll<BorderSide>(
+        side: const MaterialStatePropertyAll<BorderSide>(
           BorderSide(color: AppColors.glassBorder),
         ),
-        shape: WidgetStatePropertyAll<OutlinedBorder>(
+        shape: MaterialStatePropertyAll<OutlinedBorder>(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
