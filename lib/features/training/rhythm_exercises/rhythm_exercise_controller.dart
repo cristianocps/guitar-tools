@@ -21,6 +21,7 @@ class RhythmSessionState {
     this.result = RhythmResult.idle,
     this.isPlaying = false,
     this.elapsedMs = 0,
+    this.countInValue = 0,
   });
 
   final ExerciseDefinition definition;
@@ -30,6 +31,12 @@ class RhythmSessionState {
   final RhythmResult result;
   final bool isPlaying;
   final int elapsedMs;
+
+  /// During the count-in, the beat number currently being counted (1..N);
+  /// 0 when not counting in.
+  final int countInValue;
+
+  bool get isCountingIn => result == RhythmResult.countIn;
 
   double get accuracy =>
       expectedBeats.isEmpty ? 0 : hits / expectedBeats.length;
@@ -41,6 +48,7 @@ class RhythmSessionState {
     RhythmResult? result,
     bool? isPlaying,
     int? elapsedMs,
+    int? countInValue,
   }) {
     return RhythmSessionState(
       definition: definition,
@@ -50,11 +58,12 @@ class RhythmSessionState {
       result: result ?? this.result,
       isPlaying: isPlaying ?? this.isPlaying,
       elapsedMs: elapsedMs ?? this.elapsedMs,
+      countInValue: countInValue ?? this.countInValue,
     );
   }
 }
 
-enum RhythmResult { idle, playing, finished }
+enum RhythmResult { idle, countIn, playing, finished }
 
 /// Controller for rhythm exercises.
 class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
@@ -73,7 +82,10 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
         _repository = repository,
         super(RhythmSessionState(definition: definition));
 
-  static const int _toleranceMs = 100;
+  static const int _toleranceMs = 140;
+
+  /// Count-in length (one 4/4 bar) the user hears before scoring begins.
+  static const int _beatsPerBar = 4;
 
   final MetronomeEngine _engine;
   final ClickPlayer _clickPlayer;
@@ -86,6 +98,9 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
   StreamSubscription<OnsetEvent>? _onsetSubscription;
   Timer? _timer;
   DateTime? _startedAt;
+  RhythmPattern? _pattern;
+  double _beatDurationMs = 500;
+  double _countInMs = 0;
 
   @override
   void dispose() {
@@ -99,49 +114,83 @@ class RhythmExerciseController extends StateNotifier<RhythmSessionState> {
   }
 
   Future<void> start() async {
-    if (state.isPlaying) {
+    if (state.isPlaying || state.isCountingIn) {
       return;
     }
     final int bpm = definitionBpm;
+    _beatDurationMs = 60000 / bpm;
+    _countInMs = _beatsPerBar * _beatDurationMs;
+    _pattern = RhythmPatternCatalog.patternFor(state.definition);
+
     _engine
+      ..setBeatsPerBar(_beatsPerBar)
       ..setBpm(bpm)
       ..start(now: Duration.zero);
+    _lastBeat = 0;
 
-    final RhythmPattern pattern =
-        RhythmPatternCatalog.patternFor(state.definition);
-    final List<DateTime> expected = <DateTime>[];
-    final double beatDurationMs = 60000 / bpm;
-    DateTime next = DateTime.now().add(const Duration(milliseconds: 500));
-    for (final double duration in pattern.durations) {
-      expected.add(next);
-      next = next.add(Duration(milliseconds: (duration * beatDurationMs).round()));
-    }
-
-    state = state.copyWith(
-      isPlaying: true,
-      expectedBeats: expected,
-      result: RhythmResult.playing,
-    );
-    _startedAt = DateTime.now();
-
-    _timer = Timer.periodic(const Duration(milliseconds: 16), _tick);
-
+    // Start capturing immediately so the mic is warm, but only score onsets
+    // once the count-in finishes.
     final Stream<Uint8List> stream = await _capture.start();
     _audioSubscription = stream.listen(_rhythmDetector.processChunk);
     _onsetSubscription = _rhythmDetector.onsets.listen(_onOnset);
+
+    _startedAt = DateTime.now();
+    state = state.copyWith(
+      result: RhythmResult.countIn,
+      isPlaying: false,
+      countInValue: 1,
+      onsetCount: 0,
+      hits: 0,
+      expectedBeats: const <DateTime>[],
+    );
+
+    _timer = Timer.periodic(const Duration(milliseconds: 16), _tick);
   }
 
   void _tick(Timer timer) {
-    if (!state.isPlaying) {
+    if (_startedAt == null) {
       return;
     }
     final int elapsed = DateTime.now().difference(_startedAt!).inMilliseconds;
-    state = state.copyWith(elapsedMs: elapsed);
     _engine.processFrame(Duration(milliseconds: elapsed));
     if (_engine.currentBeat != _lastBeat) {
       _lastBeat = _engine.currentBeat;
       _clickPlayer.play(accent: _engine.isCurrentBeatAccent);
     }
+
+    // Count-in phase: let the player hear a full bar before scoring.
+    if (elapsed < _countInMs) {
+      final int value =
+          (elapsed / _beatDurationMs).floor().clamp(0, _beatsPerBar - 1) + 1;
+      if (state.countInValue != value || !state.isCountingIn) {
+        state = state.copyWith(
+          result: RhythmResult.countIn,
+          countInValue: value,
+        );
+      }
+      return;
+    }
+
+    // Transition into the scored phase exactly once.
+    if (!state.isPlaying) {
+      final DateTime scoringStart =
+          _startedAt!.add(Duration(milliseconds: _countInMs.round()));
+      final List<DateTime> expected = <DateTime>[];
+      DateTime next = scoringStart;
+      for (final double duration in _pattern!.durations) {
+        expected.add(next);
+        next = next
+            .add(Duration(milliseconds: (duration * _beatDurationMs).round()));
+      }
+      state = state.copyWith(
+        isPlaying: true,
+        result: RhythmResult.playing,
+        expectedBeats: expected,
+        countInValue: 0,
+      );
+    }
+
+    state = state.copyWith(elapsedMs: elapsed - _countInMs.round());
     if (DateTime.now().isAfter(
       state.expectedBeats.last.add(
         const Duration(milliseconds: _toleranceMs),

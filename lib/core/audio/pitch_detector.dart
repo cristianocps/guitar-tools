@@ -29,9 +29,10 @@ class PitchDetector {
     // ~82 Hz) so YIN locks onto its true fundamental instead of an octave/
     // harmonic — or missing it entirely.
     this.windowSize = 4096,
-    // True-RMS amplitude gate (~-40 dBFS): low enough to catch a softly played
-    // string a short distance from the mic, high enough to reject room noise.
-    this.noiseGate = 0.01,
+    // True-RMS amplitude gate (~-42 dBFS): low enough to catch a softly played
+    // (or low, quieter) string a short distance from the mic, high enough to
+    // reject room noise.
+    this.noiseGate = 0.008,
     this.smoothingFrames = 5,
     this.holdFrames = 3,
     YinPitchDetector? yin,

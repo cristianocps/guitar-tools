@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/mic_permission_gate.dart';
 import '../../../core/audio/providers.dart';
 import '../../../core/metronome_engine/click_player.dart';
 import '../../../core/metronome_engine/metronome_engine.dart';
@@ -37,8 +38,26 @@ final _rhythmControllerProvider = StateNotifierProvider.autoDispose
 );
 
 /// Rhythm exercise screen.
-class RhythmExercisesScreen extends ConsumerWidget {
+class RhythmExercisesScreen extends StatelessWidget {
   const RhythmExercisesScreen({required this.definition, super.key});
+
+  final ExerciseDefinition definition;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(definition.title)),
+      body: MicPermissionGate(
+        message:
+            'Tocamos o metrônomo e ouvimos você tocar junto para medir seu ritmo.',
+        child: _RhythmBody(definition: definition),
+      ),
+    );
+  }
+}
+
+class _RhythmBody extends ConsumerWidget {
+  const _RhythmBody({required this.definition});
 
   final ExerciseDefinition definition;
 
@@ -49,55 +68,32 @@ class RhythmExercisesScreen extends ConsumerWidget {
         ref.read(_rhythmControllerProvider(definition).notifier);
     final pattern = RhythmPatternCatalog.patternFor(definition);
 
-    return Scaffold(
-      appBar: AppBar(title: Text(definition.title)),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+    final ThemeData theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(
               pattern.name,
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: theme.textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              '${pattern.durations.length} batidas a ${controller.definitionBpm} BPM',
-              style: Theme.of(context).textTheme.titleMedium,
+              '${pattern.durations.length} batidas · ${controller.definitionBpm} BPM',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.textTheme.bodySmall?.color),
             ),
-            const SizedBox(height: 32),
-            Text(
-              'Acertos: ${state.hits}/${state.expectedBeats.length}',
-              style: Theme.of(context).textTheme.titleLarge,
+            const Spacer(),
+            _RhythmStage(state: state),
+            const SizedBox(height: 24),
+            _StatusLine(state: state),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: _ActionButton(state: state, onStart: controller.start),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Onsets detectados: ${state.onsetCount}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 32),
-            _FeedbackBadge(result: state.result),
-            const SizedBox(height: 32),
-            if (!state.isPlaying && state.result != RhythmResult.finished)
-              ElevatedButton.icon(
-                onPressed: controller.start,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Iniciar'),
-              )
-            else if (state.isPlaying)
-              ElevatedButton.icon(
-                onPressed: null,
-                icon: const Icon(Icons.mic),
-                label: const Text('Tocando...'),
-              )
-              else
-              Text(
-                'Concluído!',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: AppColors.inTune,
-                    ),
-              ),
           ],
         ),
       ),
@@ -105,35 +101,136 @@ class RhythmExercisesScreen extends ConsumerWidget {
   }
 }
 
-class _FeedbackBadge extends StatelessWidget {
-  const _FeedbackBadge({required this.result});
+/// The large circular focal point that adapts to the session phase.
+class _RhythmStage extends StatelessWidget {
+  const _RhythmStage({required this.state});
 
-  final RhythmResult result;
+  final RhythmSessionState state;
 
   @override
   Widget build(BuildContext context) {
-    switch (result) {
-      case RhythmResult.playing:
-        return _badge('Toque junto!', AppColors.primary);
-      case RhythmResult.finished:
-        return _badge('Concluído!', AppColors.inTune);
-      case RhythmResult.idle:
-        return const SizedBox.shrink();
-    }
-  }
+    final ThemeData theme = Theme.of(context);
+    late final Color color;
+    late final Widget center;
+    late final String caption;
 
-  Widget _badge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
-      ),
+    switch (state.result) {
+      case RhythmResult.idle:
+        color = AppColors.primary;
+        caption = 'Toque o botão para começar';
+        center = Icon(Icons.music_note, size: 64, color: color);
+      case RhythmResult.countIn:
+        color = AppColors.primary;
+        caption = 'Ouça o metrônomo';
+        center = Text(
+          '${state.countInValue}',
+          style: theme.textTheme.displayLarge?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w800,
+          ),
+        );
+      case RhythmResult.playing:
+        color = AppColors.primary;
+        caption = 'Toque junto!';
+        center = Icon(Icons.graphic_eq, size: 64, color: color);
+      case RhythmResult.finished:
+        color = AppColors.inTune;
+        caption = 'Concluído';
+        center = Text(
+          '${(state.accuracy * 100).round()}%',
+          style: theme.textTheme.displaySmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w800,
+          ),
+        );
+    }
+
+    return Column(
+      children: <Widget>[
+        Container(
+          width: 200,
+          height: 200,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.08),
+            border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+          ),
+          child: center,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          caption,
+          style: theme.textTheme.titleMedium?.copyWith(color: color),
+        ),
+      ],
     );
   }
 }
+
+/// Hits / detected-onsets summary shown under the stage.
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.state});
+
+  final RhythmSessionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: <Widget>[
+        _stat(theme, 'Acertos', '${state.hits}/${state.expectedBeats.length}'),
+        _stat(theme, 'Detectadas', '${state.onsetCount}'),
+      ],
+    );
+  }
+
+  Widget _stat(ThemeData theme, String label, String value) {
+    return Column(
+      children: <Widget>[
+        Text(value, style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 2),
+        Text(label, style: theme.textTheme.bodySmall),
+      ],
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.state, required this.onStart});
+
+  final RhythmSessionState state;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (state.result) {
+      case RhythmResult.idle:
+        return FilledButton.icon(
+          onPressed: onStart,
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Iniciar'),
+        );
+      case RhythmResult.countIn:
+        return FilledButton.icon(
+          onPressed: null,
+          icon: const Icon(Icons.hourglass_top),
+          label: const Text('Prepare-se...'),
+        );
+      case RhythmResult.playing:
+        return FilledButton.icon(
+          onPressed: null,
+          icon: const Icon(Icons.mic),
+          label: const Text('Toque junto!'),
+        );
+      case RhythmResult.finished:
+        return FilledButton.icon(
+          onPressed: onStart,
+          icon: const Icon(Icons.replay),
+          label: const Text('Repetir'),
+        );
+    }
+  }
+}
+

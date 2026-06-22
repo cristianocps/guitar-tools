@@ -34,20 +34,24 @@ final rawPitchStreamProvider = Provider.autoDispose<Stream<PitchEvent>>(
   },
 );
 
-/// Live pitch stream that automatically starts capture only when a mic-using
-/// feature (tuner / harmonic field / training) is active, the app is in the
-/// foreground and microphone permission has been granted. Rebuilds (start/stop)
-/// when any of those conditions change — this is the single owner of the
-/// microphone, satisfying the lifecycle requirement.
+/// Live pitch stream that automatically starts capture only when the tuner or
+/// harmonic field is active, the app is in the foreground and microphone
+/// permission has been granted. Rebuilds (start/stop) when any of those
+/// conditions change.
+///
+/// The training tab is intentionally excluded: each training exercise owns its
+/// own audio (ear/fretboard read [rawPitchStreamProvider] directly; rhythm
+/// drives the capture service itself). Keeping `training` here would let the
+/// still-mounted tuner/harmonic screens (preserved by the IndexedStack) hold
+/// the single capture service, so a rhythm exercise's own `start()` would throw
+/// "already running" and silently do nothing.
 final pitchStreamProvider = StreamProvider.autoDispose<PitchEvent>((Ref ref) {
   final AppTab tab = ref.watch(activeTabProvider);
   final bool resumed = ref.watch(appResumedProvider);
   final PermissionStatus permission = ref.watch(micPermissionProvider);
 
   final bool micActive =
-      (tab == AppTab.tuner ||
-              tab == AppTab.harmonicField ||
-              tab == AppTab.training) &&
+      (tab == AppTab.tuner || tab == AppTab.harmonicField) &&
           resumed &&
           permission == PermissionStatus.granted;
 

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/audio/pitch_challenge_validator.dart';
 import '../../../core/audio/pitch_detector.dart';
+import '../../../core/audio/tone_cache.dart';
 import '../../../core/audio/tone_generator.dart';
 import '../../../core/metronome_engine/click_player.dart';
 import '../../../core/metronome_engine/metronome_engine.dart';
@@ -228,7 +229,8 @@ class TechniqueExerciseController extends StateNotifier<TechniqueSessionState> {
       sampleRate: _sampleRate,
       duration: 0.4,
     );
-    await _player.play(BytesSource(wav));
+    final String path = await writeTempWav(wav);
+    await _player.play(DeviceFileSource(path));
   }
 }
 

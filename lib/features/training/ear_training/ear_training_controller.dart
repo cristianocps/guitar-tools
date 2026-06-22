@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/audio/pitch_challenge_validator.dart';
 import '../../../core/audio/pitch_detector.dart';
+import '../../../core/audio/tone_cache.dart';
 import '../../../core/audio/tone_generator.dart';
 import '../../../core/music_theory/note.dart';
 import '../../../core/music_theory/pitch.dart';
@@ -107,7 +108,8 @@ class EarTrainingController extends StateNotifier<EarTrainingSessionState> {
       sampleRate: _sampleRate,
       duration: duration,
     );
-    await _player.play(BytesSource(wav));
+    final String path = await writeTempWav(wav);
+    await _player.play(DeviceFileSource(path));
   }
 
   Future<void> _playInterval(EarTrainingChallenge challenge) async {

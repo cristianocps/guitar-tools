@@ -36,7 +36,7 @@ class EarTrainingLevelGenerator {
           level: level,
           title: 'Intervalos $level',
           description:
-              'Identifique ${_intervalNames(semitones).join(', ')} ascendentes.',
+              'Ouça e toque a 2ª nota — ${_intervalNames(semitones).join(', ')}.',
           parameters: <String, dynamic>{
             'semitones': semitones,
           },
