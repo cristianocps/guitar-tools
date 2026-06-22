@@ -22,7 +22,9 @@ final _techniqueControllerProvider = StateNotifierProvider.autoDispose.family
       bpm: (definition.parameters['bpm'] as int?)?.clamp(20, 200) ?? 80,
     );
     final clickPlayer = ClickPlayer();
-    final player = AudioPlayer()..setPlayerMode(PlayerMode.lowLatency);
+    // Tones are generated as in-memory WAV and played via BytesSource, which
+    // the low-latency (SoundPool) backend rejects — use the media player mode.
+    final player = AudioPlayer()..setPlayerMode(PlayerMode.mediaPlayer);
 
     final controller = TechniqueExerciseController(
       definition: definition,
@@ -147,7 +149,7 @@ class _FeedbackBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color),
       ),
