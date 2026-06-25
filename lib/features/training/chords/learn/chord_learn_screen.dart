@@ -9,6 +9,8 @@ import 'package:music_tools/core/audio/providers.dart';
 import 'package:music_tools/core/chords/chord_diagram_painter.dart';
 import 'package:music_tools/core/chords/chord_models.dart';
 import 'package:music_tools/core/chords/chord_repository.dart';
+import 'package:music_tools/core/settings/settings.dart';
+import 'package:music_tools/core/settings/settings_providers.dart';
 import 'package:music_tools/core/theme/app_colors.dart';
 import 'package:music_tools/core/training/models/exercise_definition.dart';
 import 'package:music_tools/core/training/providers/training_providers.dart';
@@ -33,7 +35,10 @@ final _chordLearnControllerProvider = StateNotifierProvider.autoDispose.family
     final PitchChallengeValidator validator = ref.watch(pitchChallengeValidatorProvider);
     final TrainingProgressRepository repository = ref.watch(trainingProgressRepositoryProvider);
     final GuitarSynth synth = ref.watch(guitarSynthProvider);
-    final InstrumentPlayer player = InstrumentPlayer(synth: synth, tone: GuitarTone.acoustic);
+    final GuitarTone tone = ref.watch(guitarToneProvider);
+    final InstrumentPlayer player = InstrumentPlayer(synth: synth, tone: tone);
+
+    final AppSettings settings = ref.watch(settingsProvider);
 
     final ChordLearnController controller = ChordLearnController(
       definition: definition,
@@ -44,6 +49,9 @@ final _chordLearnControllerProvider = StateNotifierProvider.autoDispose.family
       repository: repository,
       player: player,
       onFinished: () {},
+      loopEnabled: settings.chordLoopEnabled,
+      loopBpm: settings.chordLoopBpm,
+      loopBeatsPerBar: settings.chordLoopBeatsPerBar,
     );
     ref.onDispose(controller.dispose);
     return controller;
@@ -95,15 +103,17 @@ class ChordLearnScreen extends ConsumerWidget {
             _FeedbackBadge(result: state.result),
             const SizedBox(height: 16),
             Text(
-              state.isPlayingReference
-                  ? 'Ouça o acorde...'
-                  : state.isListening
-                      ? 'Toque o acorde...'
-                      : state.result == ChordLearnResult.correct
-                          ? 'Correto!'
-                          : state.result == ChordLearnResult.wrong
-                              ? 'Tente novamente'
-                              : '',
+              controller.loopEnabled
+                  ? 'Tocando em loop...'
+                  : state.isPlayingReference
+                      ? 'Ouça o acorde...'
+                      : state.isListening
+                          ? 'Toque o acorde...'
+                          : state.result == ChordLearnResult.correct
+                              ? 'Correto!'
+                              : state.result == ChordLearnResult.wrong
+                                  ? 'Tente novamente'
+                                  : '',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             if (state.detectedNote != null)
@@ -148,7 +158,7 @@ class _FeedbackBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color),
       ),

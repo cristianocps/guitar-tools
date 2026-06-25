@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:music_tools/core/chords/chord_models.dart';
 import 'package:music_tools/core/chords/chord_repository.dart';
+import 'package:music_tools/core/settings/settings.dart';
+import 'package:music_tools/core/settings/settings_providers.dart';
 import 'package:music_tools/core/training/models/exercise_definition.dart';
 import 'package:music_tools/core/training/models/exercise_type.dart';
 import 'package:music_tools/features/training/exercise_list_screen.dart';
@@ -21,11 +23,13 @@ class ChordsHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Acordes')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            const _ChordLoopConfigCard(),
+            const SizedBox(height: 12),
             _ModuleCard(
               icon: Icons.school,
               title: 'Aprender',
@@ -117,6 +121,99 @@ class ChordsHomeScreen extends StatelessWidget {
         unlockedByDefault: true,
       );
     }).toList(growable: false);
+  }
+}
+
+/// Global chord-section config: loops the reference chord at a chosen tempo
+/// and time signature, applied to the "Aprender" mode.
+class _ChordLoopConfigCard extends ConsumerWidget {
+  const _ChordLoopConfigCard();
+
+  static const List<int> _beatsOptions = <int>[2, 3, 4, 6];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppSettings settings = ref.watch(settingsProvider);
+    final SettingsNotifier notifier = ref.read(settingsProvider.notifier);
+    final bool enabled = settings.chordLoopEnabled;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          children: <Widget>[
+            SwitchListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              secondary: const Icon(Icons.loop),
+              title: const Text('Reproduzir em loop'),
+              subtitle: const Text(
+                'Repete o acorde no tempo do metrônomo (modo Aprender)',
+              ),
+              value: enabled,
+              onChanged: notifier.setChordLoopEnabled,
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              child: enabled
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Column(
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              const Text('BPM'),
+                              Expanded(
+                                child: Slider(
+                                  min: AppSettings.minChordLoopBpm.toDouble(),
+                                  max: AppSettings.maxChordLoopBpm.toDouble(),
+                                  divisions: AppSettings.maxChordLoopBpm -
+                                      AppSettings.minChordLoopBpm,
+                                  value: settings.chordLoopBpm.toDouble(),
+                                  label: '${settings.chordLoopBpm}',
+                                  onChanged: (double v) =>
+                                      notifier.setChordLoopBpm(v.round()),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 40,
+                                child: Text(
+                                  '${settings.chordLoopBpm}',
+                                  textAlign: TextAlign.end,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: <Widget>[
+                              const Text('Compasso'),
+                              const SizedBox(width: 16),
+                              DropdownButton<int>(
+                                value: settings.chordLoopBeatsPerBar,
+                                items: _beatsOptions
+                                    .map(
+                                      (int b) => DropdownMenuItem<int>(
+                                        value: b,
+                                        child: Text('$b/4'),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (int? v) {
+                                  if (v != null) {
+                                    notifier.setChordLoopBeatsPerBar(v);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -23,6 +23,9 @@ const String _kLastTab = 'settings.lastTabIndex';
 const String _kLastBpm = 'settings.lastBpm';
 const String _kLastBeatsPerBar = 'settings.lastBeatsPerBar';
 const String _kGuitarTone = 'settings.guitarTone';
+const String _kChordLoopEnabled = 'settings.chordLoopEnabled';
+const String _kChordLoopBpm = 'settings.chordLoopBpm';
+const String _kChordLoopBeatsPerBar = 'settings.chordLoopBeatsPerBar';
 
 Notation _readNotation(SharedPreferences prefs) {
   final String? raw = prefs.getString(_kNotation);
@@ -82,6 +85,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lastBeatsPerBar:
           prefs.getInt(_kLastBeatsPerBar) ?? AppSettings.defaultBeatsPerBar,
       guitarTone: _readGuitarTone(prefs),
+      chordLoopEnabled: prefs.getBool(_kChordLoopEnabled) ?? false,
+      chordLoopBpm: AppSettings.clampChordLoopBpm(
+        prefs.getInt(_kChordLoopBpm) ?? AppSettings.defaultChordLoopBpm,
+      ),
+      chordLoopBeatsPerBar:
+          prefs.getInt(_kChordLoopBeatsPerBar) ??
+              AppSettings.defaultBeatsPerBar,
     );
   }
 
@@ -124,6 +134,23 @@ class SettingsNotifier extends Notifier<AppSettings> {
   void setGuitarTone(GuitarTone value) {
     state = state.copyWith(guitarTone: value);
     unawaited(_prefs.setString(_kGuitarTone, value.name));
+  }
+
+  void setChordLoopEnabled(bool value) {
+    state = state.copyWith(chordLoopEnabled: value);
+    unawaited(_prefs.setBool(_kChordLoopEnabled, value));
+  }
+
+  void setChordLoopBpm(int value) {
+    final int clamped = AppSettings.clampChordLoopBpm(value);
+    state = state.copyWith(chordLoopBpm: clamped);
+    unawaited(_prefs.setInt(_kChordLoopBpm, clamped));
+  }
+
+  void setChordLoopBeatsPerBar(int value) {
+    final int clamped = value < 1 ? 1 : value;
+    state = state.copyWith(chordLoopBeatsPerBar: clamped);
+    unawaited(_prefs.setInt(_kChordLoopBeatsPerBar, clamped));
   }
 }
 

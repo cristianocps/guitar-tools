@@ -66,6 +66,9 @@ class ChordLearnController extends StateNotifier<ChordLearnSessionState> {
     required TrainingProgressRepository repository,
     required InstrumentPlayer player,
     required this.onFinished,
+    this.loopEnabled = false,
+    this.loopBpm = 80,
+    this.loopBeatsPerBar = 4,
   })  : _pitchStream = pitchStream,
         _capture = capture,
         _validator = validator,
@@ -90,24 +93,64 @@ class ChordLearnController extends StateNotifier<ChordLearnSessionState> {
   final InstrumentPlayer _instrument;
   final VoidCallback onFinished;
 
+  /// When true, the reference chord is replayed every bar at [loopBpm] /
+  /// [loopBeatsPerBar] instead of being played once for validation.
+  final bool loopEnabled;
+  final int loopBpm;
+  final int loopBeatsPerBar;
+
   StreamSubscription<PitchEvent>? _subscription;
   Timer? _validationTimer;
   Timer? _listenTimeout;
+  Timer? _loopTimer;
+  int _loopBeat = 0;
 
   @override
   void dispose() {
     _subscription?.cancel();
     _validationTimer?.cancel();
     _listenTimeout?.cancel();
+    _loopTimer?.cancel();
     unawaited(_capture.stop());
     unawaited(_instrument.dispose());
     super.dispose();
   }
 
   Future<void> _init() async {
-    await _capture.start();
+    if (loopEnabled) {
+      unawaited(_startLoop());
+      return;
+    }
+    try {
+      await _capture.start();
+    } on Object {
+      // Capture may already be running (e.g. when switching positions); the
+      // reference should still play in that case.
+    }
     unawaited(playReference());
     startListening();
+  }
+
+  Future<void> _startLoop() async {
+    _loopTimer?.cancel();
+    final int bpm = loopBpm.clamp(20, 200);
+    final int beats = loopBeatsPerBar < 1 ? 1 : loopBeatsPerBar;
+    final int beatMs = (60000 / bpm).round();
+    // The chord is re-struck on every beat (so the loop clearly tracks the
+    // BPM), and rings for roughly one beat so faster tempos give shorter,
+    // tighter strums. The time signature accents the downbeat.
+    final double duration = (beatMs / 1000 * 0.95).clamp(0.2, 2.0);
+    state = state.copyWith(isPlayingReference: true);
+    await _instrument.prepareChord(
+      state.currentPosition.midi,
+      duration: duration,
+    );
+    _loopBeat = 0;
+    await _instrument.triggerChord(accent: true);
+    _loopTimer = Timer.periodic(Duration(milliseconds: beatMs), (_) {
+      _loopBeat = (_loopBeat + 1) % beats;
+      unawaited(_instrument.triggerChord(accent: _loopBeat == 0));
+    });
   }
 
   void startListening() {
@@ -180,10 +223,12 @@ class ChordLearnController extends StateNotifier<ChordLearnSessionState> {
 
   Future<void> playReference() async {
     state = state.copyWith(isPlayingReference: true);
-    for (final int midi in state.currentPosition.midi) {
-      await _instrument.playMidi(midi, duration: 0.5);
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-    }
+    // Play the whole chord at once (unison) instead of string by string.
+    await _instrument.playChord(
+      state.currentPosition.midi,
+      duration: 1.6,
+      strumMs: 0,
+    );
     state = state.copyWith(isPlayingReference: false);
   }
 

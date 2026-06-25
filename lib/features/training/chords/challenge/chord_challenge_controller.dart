@@ -80,7 +80,11 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
     _init();
   }
 
-  static const int _validationWindowMs = 1000;
+  /// Number of consecutive-ish pitch frames matching a chord tone required to
+  /// accept the chord. At ~46 ms per frame this is a short (~140 ms) sustained
+  /// match, enough to reject a stray transient without making the player hold
+  /// the chord for a full second.
+  static const int _requiredMatchFrames = 3;
 
   final Stream<PitchEvent> _pitchStream;
   final AudioCaptureService _capture;
@@ -89,13 +93,13 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
   final VoidCallback onFinished;
 
   StreamSubscription<PitchEvent>? _subscription;
-  Timer? _validationTimer;
   Timer? _countdownTimer;
+  int _matchFrames = 0;
+  bool _roundResolved = false;
 
   @override
   void dispose() {
     _subscription?.cancel();
-    _validationTimer?.cancel();
     _countdownTimer?.cancel();
     unawaited(_capture.stop());
     super.dispose();
@@ -107,6 +111,8 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
   }
 
   void _startRound() {
+    _matchFrames = 0;
+    _roundResolved = false;
     state = state.copyWith(
       detectedNote: null,
       result: ChordChallengeResult.idle,
@@ -126,7 +132,7 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
   }
 
   void _onPitch(PitchEvent event) {
-    if (!event.hasPitch) {
+    if (_roundResolved || !event.hasPitch) {
       return;
     }
     final TuningReading? reading = noteFromFrequency(event.frequency);
@@ -139,20 +145,26 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
     );
     state = state.copyWith(detectedNote: name);
 
+    // A strummed chord only yields one (mono) pitch per frame — usually the
+    // ringing bass/root. Accept the chord once any of its tones has been
+    // detected for a few frames, instead of resetting a timer on every frame
+    // (which never elapsed while the chord kept ringing).
     final Set<int> expected = state.currentChord.pitchClasses;
-    for (final int pitchClass in expected) {
-      if (_validator.matches(event.frequency, pitchClass)) {
-        _validationTimer?.cancel();
-        _validationTimer = Timer(
-          const Duration(milliseconds: _validationWindowMs),
-          _handleCorrect,
-        );
-        return;
+    final bool matched = expected
+        .any((int pitchClass) => _validator.matches(event.frequency, pitchClass));
+    if (matched) {
+      _matchFrames++;
+      if (_matchFrames >= _requiredMatchFrames) {
+        _handleCorrect();
       }
     }
   }
 
   void _handleCorrect() {
+    if (_roundResolved) {
+      return;
+    }
+    _roundResolved = true;
     _cleanupRound();
     final int newCorrect = state.correctCount + 1;
     final int nextIndex = state.currentIndex + 1;
@@ -171,6 +183,10 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
   }
 
   void _handleTimeout() {
+    if (_roundResolved) {
+      return;
+    }
+    _roundResolved = true;
     _cleanupRound();
     final int nextIndex = state.currentIndex + 1;
     final int totalRounds = state.definition.parameters['rounds'] as int;
@@ -189,7 +205,6 @@ class ChordChallengeController extends StateNotifier<ChordChallengeSessionState>
   void _cleanupRound() {
     _subscription?.cancel();
     _subscription = null;
-    _validationTimer?.cancel();
     _countdownTimer?.cancel();
   }
 
